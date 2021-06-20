@@ -3,8 +3,11 @@ module douyin
 go 1.16
 
 require (
-	github.com/asmcos/requests v0.0.0-20210319030608-c839e8ae4946
-	github.com/disintegration/imaging v1.6.2
-	github.com/makiuchi-d/gozxing v0.0.0-20210616151951-686cd599f668
+	github.com/PuerkitoBio/goquery v1.7.0
+	github.com/chromedp/cdproto v0.0.0-20210526005521-9e51b9051fd0
+	github.com/chromedp/chromedp v0.7.3
+	github.com/fsnotify/fsnotify v1.4.9
+	github.com/makiuchi-d/gozxing v0.0.0-20210619170909-1e16da1a4e8e
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+	github.com/spf13/viper v1.8.0
 )
