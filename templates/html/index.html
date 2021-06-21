@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-cn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>显示大屏</title>
+    <script src="js/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="css/bootstrap-3.4.1.min.css" />
+</head>
+<style>
+    .img{
+        width: 180px;
+        height: 180px;
+    }
+</style>
+<body>
+    <nav class="navbar navbar-default navbar-static-top">
+        <div class="container">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">一个简单的显示屏</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container">
+        <div class="qrcode" style="display: none">
+            <img class="img" id="img" src="" />
+        </div>
+        <div id="table">
+        </div>
+    </div>
+</body>
+<script>
+    var config = {}
+    var waitLogin = false
+    var timeId
+    var timeId2
+    // 轮询
+    $(function () {
+        // 获取配置
+        $.ajax({
+            url: "api/get/config",
+            type: "get",
+            dataType: "json",
+            success: (res) => {
+                if (res.code !== 200) {
+                    alert(res.msg)
+                }else{
+                    config = res.config
+                    run()
+                    // getData()
+                    // const timeId = setInterval(() => {
+                    //     getData()
+                    // }, config.grabS * 1000)
+                }
+            },
+        })
+    })
+
+    function run() {
+        // 检测登录状态
+        getData()
+    }
+    function getData() {
+        // 轮询获取数据
+        $.ajax({
+            url: "api/get/data",
+            type: "get",
+            dataType: "json",
+            success: (res) => {
+                if (res.code === 4003) {
+                    // 需要登录
+                    if (!waitLogin) {
+                        login()
+                    }
+                } else {
+                    waitLogin = false
+                    $(".qrcode").hide()
+                    if (timeId) {
+                        clearTimeout(timeId)
+                    }
+                    if (timeId2) {
+                        clearInterval(timeId2)
+                    }
+                    // 定时器
+                    setTimeout(function (){getData()}, config.grabS * 1000)
+
+                    var $table = $("#table")
+                    $table.html("")
+                    var list = res.list
+                    var b = false
+                    html = "<h2>更新时间: " + res.updated_at + "</h2>"
+                    if (list) {
+                        b = true
+                        for (var i = 0; i < list.length; i++) {
+                            data = list[i]
+                            html += "<div class=\"mytable\">"
+                            html += "<h2>" + data.anchor_nickname + "</h2>"
+                            if (data.list) {
+                                var dList = data.list
+                                html += "<table class=\"table table-striped\">"
+                                for (var n = 0; n<dList.length; n++) {
+                                    var d = dList[n]
+                                    html += "<tr><th>累计观看人数</th><th>GMV</th><th>实时该刷多少钱（降）</th><th>预期UV价值</th><th>实时UV价值</th></tr>"
+                                }
+                                html += "</table>"
+                            }
+                            html += "</div>"
+                        }
+                    }
+                    if (!b) {
+                        html += "<br/>暂无数据"
+                    }
+                    $table.html(html)
+                }
+            },
+        })
+    }
+    function login() {
+        waitLogin = true
+        $.ajax({
+            url: "api/get/qrcode",
+            type: "get",
+            dataType: "json",
+            success: (res) => {
+                if (res.code === 8888) {
+                    // 重新请求
+                    setTimeout(function () {
+                        login()
+                    }, 1000)
+                } else {
+                    $img = $(".qrcode")
+                    $("#img").attr("src", "tmp/img/qrcode.png?time=" + new Date().getTime())
+                    $img.show()
+                    // 定时刷新二维码
+                    timeId = setTimeout(function () {
+                        login()
+                    }, 1000 * 60)
+                    timeId2 = setInterval(function () {
+                        getData()
+                    }, 1000)
+                }
+            },
+        })
+    }
+</script>
+</html>

@@ -36,7 +36,7 @@ func UserTrack() (result UserTrackResp) {
 	req := NewRequest("GET", USER_TRACK,nil)
 	resp, err := client.Do(req)
 	if err != nil {
-		panic(nil)
+		panic(err)
 	}
 	body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()

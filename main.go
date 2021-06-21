@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"douyin/api"
 	"douyin/utils"
@@ -11,12 +10,10 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
 	"github.com/fsnotify/fsnotify"
-	"github.com/makiuchi-d/gozxing"
-	"github.com/makiuchi-d/gozxing/qrcode"
-	goQrcode "github.com/skip2/go-qrcode"
+	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
-	"image"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -24,10 +21,10 @@ import (
 
 func init() {
 	// 创建临时文件夹
-	_, err := os.Stat("./tmp")
+	_, err := os.Stat(utils.FolderPath + "/tmp")
 	if err != nil && os.IsNotExist(err) {
 		err = nil
-		err = os.MkdirAll("./tmp", os.ModePerm)
+		err = os.MkdirAll(utils.FolderPath + "/tmp", os.ModePerm)
 	}
 	if err != nil {
 		panic(err)
@@ -36,7 +33,7 @@ func init() {
 	// 加载配置
 	viper.SetConfigName("config")
 	viper.SetConfigType("ini")
-	viper.AddConfigPath(".")
+	viper.AddConfigPath(utils.FolderPath)
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("Fatal error config file: %w \n", err))
 	}
@@ -46,83 +43,172 @@ func init() {
 	})
 }
 
-var running = false
-var inLogin = false // 是否正在登录
+// 二维码获取状态
+var qrcodeLatest = false
+var waitScan = false // 等待扫描
 
-func main() {
-	// 监听登录状态
-	for {
-		run()
-		time.Sleep(time.Second * time.Duration(viper.GetInt64("Interval.CheckLoginS")))
-	}
-}
-
-func run() {
+// 检测登录状态
+func getLoginStatus() (b bool, msg string, list []api.ListQuickviewResult) {
+	b = true
+	msg = "success"
 	uResp := api.UserTrack()
 	if uResp.St != 0 || !uResp.Data.UserIsLogin {
-		// 未登录
-		login()
-	} else if !running {
-		running = true
-		// 获取数据
+		b = false
+		msg = "请登录"
+		return
+	} else {
 		lResp := api.ListQuickview()
 		if lResp.St != 0 {
-			fmt.Println("获取商户数据失败;请重新登录,失败信息:" + lResp.Msg)
-			// 获取失败 重新登录
-			login()
+			b = false
+			msg = "获取商户数据失败;请重新登录;原因:" + lResp.Msg
+			return
 		}else{
-			if len(lResp.Data.DataResult) <= 0 {
-				running = false
-				// 未找到直播间
-				fmt.Println("未找到直播间;请重新登录")
-			}else{
-				for _, r := range lResp.Data.DataResult {
-					go timer(r)
-				}
-			}
+			list = lResp.Data.DataResult
+			return
 		}
 	}
 }
 
-func login() {
-	if !inLogin {
-		inLogin = true
-		running = false // 关闭所有爬虫
-		// 打开浏览器
-		// chromdp依赖context上限传递参数
-		ctx, _ := chromedp.NewExecAllocator(
-			context.Background(),
-			// 以默认配置的数组为基础，覆写headless参数
-			// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
-			append(
-				chromedp.DefaultExecAllocatorOptions[:],
-				chromedp.Flag("headless", true),
-				chromedp.Flag("blink-settings", "imagesEnabled=false"),
-				chromedp.UserAgent(viper.GetString("System.UserAgent")),
-			)...,
-		)
-		// 创建新的chromedp上下文对象，超时时间的设置不分先后
-		// 注意第二个返回的参数是cancel()，只是我省略了
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		ctx, _ = chromedp.NewContext(
-			ctx,
-			// 设置日志方法
-			chromedp.WithLogf(log.Printf),
-		)
-		defer cancel()
-		// 设置超时关闭
-		go func() {
-			time.Sleep(time.Minute * 2)
-			fmt.Println("二维码过期")
-			chromedp.Cancel(ctx)
-			inLogin = false
-		}()
-		// 执行我们自定义的任务 - myTasks函数在第4步
-		if err := chromedp.Run(ctx, myTasks()); err != nil {
-			fmt.Println(err.Error())
+func main() {
+
+	go func(){
+		// 循环检测登录状态
+		// 监听登录状态
+		for {
+			//return
+			// 未登录并且未获取二维码 则获取最新二维码
+			b, _, _ := getLoginStatus()
+			// 未获取最新状态并且也没有等待扫描 则获取最新二维码
+			if !b && !waitScan && !qrcodeLatest {
+				waitScan = true
+				ctx, _ := chromedp.NewExecAllocator(
+					context.Background(),
+					// 以默认配置的数组为基础，覆写headless参数
+					// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
+					append(
+						chromedp.DefaultExecAllocatorOptions[:],
+						chromedp.Flag("headless", false),
+						chromedp.Flag("blink-settings", "imagesEnabled=false"),
+						chromedp.UserAgent(viper.GetString("System.UserAgent")),
+					)...,
+				)
+				ctx, _ = context.WithTimeout(ctx, time.Minute * 1)
+				ctx, _ = chromedp.NewContext(
+					ctx,
+					// 设置日志方法
+					chromedp.WithLogf(log.Printf),
+				)
+				// 设置超时关闭
+				//go func() {
+				//	time.Sleep(time.Minute * 2)
+				//	fmt.Println("二维码过期")
+				//	waitScan = false
+				//	qrcodeLatest = false
+				//	chromedp.Cancel(ctx)
+				//	cancel()
+				//}()
+				// 执行我们自定义的任务 - myTasks函数在第4步
+				if err := chromedp.Run(ctx, myTasks()); err != nil {
+					fmt.Println(err.Error())
+				}
+				waitScan = false
+				qrcodeLatest = false
+			}
+			time.Sleep(time.Second * time.Duration(viper.GetInt64("Interval.CheckLoginS")))
 		}
-		inLogin = false
+	}()
+	// 开启gin服务
+	r := gin.Default()
+	// 加载html文件
+	r.LoadHTMLGlob(utils.FolderPath + "/templates/html/*")
+	r.Static("/js", utils.FolderPath + "/templates/js")
+	r.Static("/css", utils.FolderPath + "/templates/css")
+	r.Static("/tmp/img", utils.FolderPath + "/tmp")
+	// 初始化路由
+	r.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "index.html", gin.H{})
+	})
+	r.GET("/api/get/config", func(c *gin.Context) {
+		grabS := viper.GetInt64("Interval.GrabS")
+		c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg": "success",
+			"config": gin.H{
+				"grabS": grabS,
+			},
+		})
+	})
+	// 获取登录二维码
+	r.GET("/api/get/qrcode", func(c *gin.Context) {
+		// 直接读取图片数据返回
+		// 判断二维码是否最新
+		if qrcodeLatest {
+			c.JSON(http.StatusOK, gin.H{
+				"code": 200,
+				"msg": "success",
+			})
+		}else{
+			// 等待
+			c.JSON(http.StatusOK, gin.H{
+				"code": 8888,
+				"msg": "请等待二维码抓取",
+			})
+		}
+	})
+
+	// 检查登录状态
+	r.GET("/api/login/status", func(c *gin.Context) {
+		b, msg, _ := getLoginStatus()
+		if !b {
+			c.JSON(http.StatusOK, gin.H{
+				"code": 4003,
+				"msg": msg,
+			})
+		}else{
+			c.JSON(http.StatusOK, gin.H{
+				"code": 200,
+				"msg": "success",
+			})
+		}
+	})
+	// 获取数据
+	r.GET("/api/get/data", func(c *gin.Context) {
+		b, msg, list := getLoginStatus()
+		if !b {
+			c.JSON(http.StatusOK, gin.H{
+				"code": 4003,
+				"msg": msg,
+			})
+			return
+		}
+		var respList []ListData
+		for _, l := range list {
+			var ll []api.ScreenProductDetailRespData
+			result := api.ScreenProductDetail(l.LiveRoomID, l.LiveAppID, "bind_time", false)
+			if result.St == 0 {
+				ll = append(ll, result.Data)
+			}
+			respList = append(respList, ListData{
+				Mch:  l,
+				List: ll,
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg": "success",
+			"list": respList,
+			"updated_at": utils.TimeFormat("Y-m-d H:i:s", time.Now()),
+		})
+	})
+	err := r.Run(":" + viper.GetString("Server.Port")) // listen and serve on 0.0.0.0:8080
+	if err != nil {
+		panic(err)
 	}
+}
+
+type ListData struct {
+	Mch api.ListQuickviewResult `json:"mch"`
+	List []api.ScreenProductDetailRespData `json:"list"`
 }
 
 // 自定义任务
@@ -157,13 +243,27 @@ func getCode() chromedp.ActionFunc {
 			err = errors.New("二维码获取失败")
 			return
 		}
+		// 保存二维码数据
+		//file, err := os.OpenFile(utils.FolderPath + "/tmp/qrcode.tmp", os.O_CREATE | os.O_RDWR, 0775)
+		//if err != nil {
+		//	return err
+		//}
+		//defer file.Close()
+		//_, err = file.Write([]byte(str))
+		//if err != nil {
+		//	return
+		//}
 		str = strings.Replace(str, `data:image/png;base64,`, ``, 1)
-		qB, err := base64.StdEncoding.DecodeString(str)
-		// 打印二维码
-		err = printQRCode(qB)
+		qB, _ := base64.StdEncoding.DecodeString(str)
+		file, err := os.OpenFile(utils.FolderPath + "/tmp/qrcode.png", os.O_CREATE | os.O_RDWR, 0775)
+		if err != nil {
+			return err
+		}
+		_, err = file.Write(qB)
 		if err != nil {
 			return
 		}
+		qrcodeLatest = true
 		return
 	}
 }
@@ -182,80 +282,6 @@ func WaitLogin() chromedp.ActionFunc {
 	}
 }
 
-func printQRCode(code []byte) (err error) {
-	// 1. 因为我们的字节流是图像，所以我们需要先解码字节流
-	img, _, err := image.Decode(bytes.NewReader(code))
-	if err != nil {
-		return
-	}
-
-	// 2. 然后使用gozxing库解码图片获取二进制位图
-	bmp, err := gozxing.NewBinaryBitmapFromImage(img)
-	if err != nil {
-		return
-	}
-
-	// 3. 用二进制位图解码获取gozxing的二维码对象
-	res, err := qrcode.NewQRCodeReader().Decode(bmp, nil)
-	if err != nil {
-		return
-	}
-	// 4. 用结果来获取go-qrcode对象（注意这里我用了库的别名）
-	qr, err := goQrcode.New(res.String(), goQrcode.Low)
-	if err != nil {
-		return
-	}
-	// 5. 输出到标准输出流
-	fmt.Println(qr.ToString(false))
-	return
-}
-
-
-func timer(r api.ListQuickviewResult) {
-	productC, _ := getProductCsv(nil, r.AnchorNickname)
-	for {
-		if !running {
-			// 停止
-			return
-		}
-		//sResp := api.ScreenBaseInfo(r.LiveRoomID, r.LiveAppID)
-		//if sResp.St != 0 {
-		//	return
-		//}
-		//data := sResp.Data
-		//fmt.Println("=========================================================")
-		//fmt.Println("获取时间:" + utils.TimeFormat("Y-m-d H:i:s", time.Now()))
-		//fmt.Println(fmt.Sprintf("直播间:%s", data.Title))
-		//fmt.Println(fmt.Sprintf("累计成交金额(元):%d万", data.Gmv/100))
-		//fmt.Println(fmt.Sprintf("成交件数:%d    成交人数:%d    成交转化率:%s%%    千次观看成交金额:%s    成交粉丝占比:%s%%",
-		//	data.PayCnt.Value, data.PayUcnt.Value, utils.KeepFloat64ToString(data.ProductClickToPayRate.Value * 100, 2),
-		//	utils.KeepFloat64ToString(data.Gpm.Value, 2), utils.KeepFloat64ToString(data.PayFansRatio.Value * 100, 2)))
-		//fmt.Println("=========================================================")
-		n := time.Now()
-		pResp := api.ScreenProductDetail(r.LiveRoomID, r.LiveAppID, "bind_time", false)
-		if pResp.St != 0 {
-			return
-		}
-		data := pResp.Data.DataResult
-		// 写csv
-		productC, _ = getProductCsv(productC, r.AnchorNickname)
-		var columns [][]string
-		for _, d := range data {
-			//"名称", "价格", "商品点击率", "成交订单数", "成交金额", "成交转化率",
-			columns = append(columns, []string{
-				utils.TimeFormat("Y-m-d H:i:s", n), d.Title, d.CurrMinPrice, d.ProductClickInLiveRate, d.PayInLiveOrderCnt, d.PayInLiveOrderProductGmv, d.ProductClickToPayRate,
-			})
-		}
-		fmt.Println("-----------------------"+utils.TimeFormat("Y-m-d H:i:s", n)+"---------------------------")
-		fmt.Println(columns)
-		err := productC.W.WriteAll(columns)
-		if err != nil {
-			fmt.Println("写入异常", err)
-		}
-		fmt.Println("---------------------------------------------------------------------")
-		time.Sleep(time.Second * time.Duration(viper.GetInt64("Interval.GrabS")))
-	}
-}
 // 获取对应csv对象
 func getCsv(oldC *utils.Csv, path, name string, title []string) (*utils.Csv, error) {
 	// 取出当前时间
@@ -279,7 +305,7 @@ func getCsv(oldC *utils.Csv, path, name string, title []string) (*utils.Csv, err
 
 // 获取商品写入csv
 func getProductCsv(c *utils.Csv, nickName string) (*utils.Csv, error) {
-	c, err := getCsv(c, "./数据/" + nickName + "/商品", "商品数据", []string{
+	c, err := getCsv(c, utils.FolderPath + "/数据/" + nickName + "/商品", "商品数据", []string{
 		"抓取时间", "名称", "价格", "商品点击率", "成交订单数", "成交金额", "成交转化率",
 	})
 	return c, err

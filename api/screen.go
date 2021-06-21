@@ -82,35 +82,36 @@ func ScreenBaseInfo(roomId string, appId int) (result ScreenBaseInfoResp) {
 type ScreenProductDetailResp struct {
 	St int `json:"st"`
 	Msg string `json:"msg"`
-	Data struct {
-		IndexGroups []struct {
-			GroupDisplay string `json:"group_display"`
-			GroupName string `json:"group_name"`
-			List []struct {
-				IndexDisplay string `json:"index_display"`
-				IndexName string `json:"index_name"`
-			} `json:"list"`
-		} `json:"index_groups"`
-		IndexSelected []string `json:"index_selected"`
-		DataHead []struct {
+	Data ScreenProductDetailRespData `json:"data"`
+}
+type ScreenProductDetailRespData struct {
+	IndexGroups []struct {
+		GroupDisplay string `json:"group_display"`
+		GroupName string `json:"group_name"`
+		List []struct {
 			IndexDisplay string `json:"index_display"`
 			IndexName string `json:"index_name"`
-		} `json:"data_head"`
-		DataResult []struct {
-			Product struct {
-				Link string `json:"link"`
-				Promotion bool `json:"promotion"`
-				ImageURI string `json:"image_uri"`
-				ID string `json:"id"`
-			} `json:"product"`
-			Title string `json:"title"`
-			CurrMinPrice string `json:"curr_min_price"`
-			ProductClickInLiveRate string `json:"product_click_in_live_rate"`
-			PayInLiveOrderCnt string `json:"pay_in_live_order_cnt"`
-			PayInLiveOrderProductGmv string `json:"pay_in_live_order_product_gmv"`
-			ProductClickToPayRate string `json:"product_click_to_pay_rate"`
-		} `json:"data_result"`
-	} `json:"data"`
+		} `json:"list"`
+	} `json:"index_groups"`
+	IndexSelected []string `json:"index_selected"`
+	DataHead []struct {
+		IndexDisplay string `json:"index_display"`
+		IndexName string `json:"index_name"`
+	} `json:"data_head"`
+	DataResult []struct {
+		Product struct {
+			Link string `json:"link"`
+			Promotion bool `json:"promotion"`
+			ImageURI string `json:"image_uri"`
+			ID string `json:"id"`
+		} `json:"product"`
+		Title string `json:"title"`
+		CurrMinPrice string `json:"curr_min_price"`
+		ProductClickInLiveRate string `json:"product_click_in_live_rate"`
+		PayInLiveOrderCnt string `json:"pay_in_live_order_cnt"`
+		PayInLiveOrderProductGmv string `json:"pay_in_live_order_product_gmv"`
+		ProductClickToPayRate string `json:"product_click_to_pay_rate"`
+	} `json:"data_result"`
 }
 
 func ScreenProductDetail(roomId string, appId int, sorField string, isAsc bool) (result ScreenProductDetailResp) {

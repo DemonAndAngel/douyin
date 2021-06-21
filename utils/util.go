@@ -2,10 +2,22 @@ package utils
 
 import (
 	"fmt"
+	"github.com/kardianos/osext"
 	"strconv"
 	"strings"
 	"time"
 )
+
+var FolderPath = ""
+
+func init() {
+	var err error
+	FolderPath, err = osext.ExecutableFolder()
+	if err != nil {
+		panic(err)
+	}
+	FolderPath = "."
+}
 
 // KeepFloat64 保留几位小数
 func KeepFloat64(val float64, num int) float64 {
