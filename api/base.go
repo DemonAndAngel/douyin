@@ -11,7 +11,7 @@ const (
 	BASE_URL = `https://compass.jinritemai.com`
 	USER_TRACK = BASE_URL + `/business_api/home/track`
 	USER_BASIC_INFO = BASE_URL + `/business_api/home/user_basic_info`
-	Live_Quickview = BASE_URL + `/business_api/shop/core_data/live_quickview?date_type=1`
+	//Live_Quickview = BASE_URL + `/business_api/shop/core_data/live_quickview?date_type=1`
 
 	// 实时大屏
 	SCREEN_BASE_URL = `https://compass.jinritemai.com`
@@ -27,7 +27,20 @@ func NewRequest(method, url string, body io.Reader) *http.Request {
 	// 添加cookie
 	cookies := utils.LoadCookies()
 	for _, c := range cookies {
-		req.AddCookie(c)
+		req.AddCookie(&http.Cookie{
+			Name:       c.Name,
+			Value:      c.Value,
+			Path:       c.Path,
+			Domain:     c.Domain,
+			//Expires:    time.Time{},
+			//RawExpires: "",
+			//MaxAge:     0,
+			Secure:     c.Secure,
+			HttpOnly:   c.HTTPOnly,
+			//SameSite:   0,
+			//Raw:        "",
+			//Unparsed:   nil,
+		})
 	}
 	return req
 }

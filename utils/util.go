@@ -1,8 +1,11 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/kardianos/osext"
+	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -16,7 +19,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	FolderPath = "."
+	//FolderPath = "."
 }
 
 // KeepFloat64 保留几位小数
@@ -60,4 +63,91 @@ func CreateTimeFormat(format string, now string) time.Time {
 		t, _ := time.ParseInLocation(format, now, loc)
 		return t
 	}
+}
+
+func SetUV(f float64) (err error) {
+	// 3. 存储到临时文件
+	if err = ioutil.WriteFile(FolderPath + "/tmp/uv.tmp", []byte(strconv.FormatFloat(f, 'E', -1, 64)), 0755); err != nil {
+		return
+	}
+	return
+}
+func GetUV() (f float64, err error) {
+	if _, _err := os.Stat(FolderPath + "/tmp/uv.tmp"); os.IsNotExist(_err) {
+		return
+	}
+	b, err := ioutil.ReadFile(FolderPath + "/tmp/uv.tmp")
+	if err != nil {
+		return
+	}
+	// 反序列化
+	str := string(b)
+	f, _ = strconv.ParseFloat(str, 64)
+	return
+}
+
+type RoomUrlInfo struct {
+	RoomId string `json:"room_id"`
+	BaseInfoUrl string `json:"base_info_url"`
+	ProductDetailUrl string `json:"product_detail_url"`
+}
+func SaveRoomInfoUrl(room RoomUrlInfo) (err error) {
+	// 先取出来
+	rooms, err := GetRoomInfoUrls()
+	if err != nil {
+		return
+	}
+	// 再存
+	bo := false
+	for k, r := range rooms {
+		if r.RoomId == room.RoomId {
+			if room.BaseInfoUrl != "" {
+				r.BaseInfoUrl = room.BaseInfoUrl
+			}
+			if room.ProductDetailUrl != "" {
+				r.ProductDetailUrl = room.ProductDetailUrl
+			}
+			rooms[k] = r
+			bo = true
+			break
+		}
+	}
+	if !bo {
+		rooms = append(rooms, room)
+	}
+	b, _ := json.Marshal(rooms)
+	if err = ioutil.WriteFile(FolderPath + "/tmp/room_url_info.tmp", b, 0755); err != nil {
+		return
+	}
+	return
+}
+func GetRoomInfoUrls() (rooms []RoomUrlInfo, err error) {
+	if _, _err := os.Stat(FolderPath + "/tmp/room_url_info.tmp"); os.IsNotExist(_err) {
+		return
+	}
+	b, err := ioutil.ReadFile(FolderPath + "/tmp/room_url_info.tmp")
+	if err != nil {
+		return
+	}
+	// 反序列化
+	_ = json.Unmarshal(b, &rooms)
+	return
+}
+func SaveUpdatedAt(t time.Time) (err error) {
+	if err = ioutil.WriteFile(FolderPath + "/tmp/updated_at.tmp", []byte(TimeFormat("Y-m-d H:i:s", t)), 0755); err != nil {
+		return
+	}
+	return
+}
+func GetUpdatedAt() (t time.Time, err error) {
+	if _, _err := os.Stat(FolderPath + "/tmp/updated_at.tmp"); os.IsNotExist(_err) {
+		return
+	}
+	b, err := ioutil.ReadFile(FolderPath + "/tmp/updated_at.tmp")
+	if err != nil {
+		return
+	}
+	// 反序列化
+	t = CreateTimeFormat("Y-m-d H:i:s", string(b))
+	return
 }

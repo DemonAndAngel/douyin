@@ -39,9 +39,9 @@ type ListQuickviewResult struct {
 	ShowBigScreen bool `json:"show_big_screen"`
 	LiveAppID int `json:"live_app_id"`
 }
-func ListQuickview() (result ListQuickviewResp) {
+func ListQuickview(url string) (result ListQuickviewResp) {
 	client := &http.Client{}
-	req := NewRequest("GET", Live_Quickview, nil)
+	req := NewRequest("GET", url, nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		panic(nil)
