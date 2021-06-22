@@ -5,6 +5,7 @@ import (
 	"douyin/api"
 	"douyin/utils"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
@@ -56,7 +57,7 @@ func init() {
 
 var isLogin = false
 var qrcodeLatest = false
-var liveQuickviewUrl = ""
+var liveAnalysisUrl = ""
 
 func main() {
 	go func() {
@@ -182,8 +183,8 @@ func main() {
 		switch ev := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			req := ev.Request
-			if strings.Index(req.URL, "live_quickview") != -1 {
-				liveQuickviewUrl = req.URL
+			if strings.Index(req.URL, "live_analysis") != -1 {
+				liveAnalysisUrl = req.URL
 			}
 			break
 		}
@@ -206,13 +207,18 @@ func main() {
 	}
 	cancel()
 	// 获取所有直播间
-	resp := api.ListQuickview(liveQuickviewUrl)
+	resp := api.LiveAnalysis(liveAnalysisUrl)
 	if resp.St != 0 {
 		fmt.Println(resp.Msg)
 	}else{
 		baseUrl := `https://compass.jinritemai.com/screen/list/shop/main`
 		list := resp.Data.DataResult
-		for _, l := range list {
+		b, _ := json.Marshal(list)
+		fmt.Println(string(b))
+		for k, l := range list {
+			if k >= 3 {
+				break
+			}
 			url := baseUrl + fmt.Sprintf("?live_room_id=%s&live_app_id=%d&source=shop_real_time", l.LiveRoomID, l.LiveAppID)
 			// 打开浏览器
 			ctx, _ := chromedp.NewExecAllocator(
@@ -272,40 +278,40 @@ func main() {
 					time.Sleep(time.Duration(viper.GetInt64("Interval.UrlS")) * time.Second)
 				}
 			}()
-			// 定时获取数据
-			for {
-				AGAIN:
-				rooms, _ := utils.GetRoomInfoUrls()
-				if len(rooms) <= 0 {
-					continue
+		}
+		// 定时获取数据
+		for {
+		AGAIN:
+			rooms, _ := utils.GetRoomInfoUrls()
+			if len(rooms) <= 0 {
+				continue
+			}
+			for _, r := range rooms {
+				if r.BaseInfoUrl == "" || r.ProductDetailUrl == "" {
+					goto AGAIN
 				}
-				for _, r := range rooms {
-					if r.BaseInfoUrl == "" || r.ProductDetailUrl == "" {
-						goto AGAIN
-					}
-					// 保存数据
-					bResp := api.ScreenBaseInfo(r.BaseInfoUrl)
-					if bResp.St	== 0 {
-						err := api.ScreenSaveBaseInfo(r.RoomId, bResp.Data)
-						if err != nil {
-							fmt.Println(err)
-						}
-					}
-					pResp := api.ScreenProductDetail(r.ProductDetailUrl)
-					if pResp.St	== 0 {
-						err := api.ScreenSaveProductDetail(r.RoomId, pResp.Data)
-						if err != nil {
-							fmt.Println(err)
-						}
-					}
-					// 保存更新时间
-					err := utils.SaveUpdatedAt(time.Now())
+				// 保存数据
+				bResp := api.ScreenBaseInfo(r.BaseInfoUrl)
+				if bResp.St	== 0 {
+					err := api.ScreenSaveBaseInfo(r.RoomId, bResp.Data)
 					if err != nil {
 						fmt.Println(err)
 					}
 				}
-				time.Sleep(time.Duration(viper.GetInt64("Interval.GrabS")) * time.Second)
+				pResp := api.ScreenProductDetail(r.ProductDetailUrl)
+				if pResp.St	== 0 {
+					err := api.ScreenSaveProductDetail(r.RoomId, pResp.Data)
+					if err != nil {
+						fmt.Println(err)
+					}
+				}
+				// 保存更新时间
+				err := utils.SaveUpdatedAt(time.Now())
+				if err != nil {
+					fmt.Println(err)
+				}
 			}
+			time.Sleep(time.Duration(viper.GetInt64("Interval.GrabS")) * time.Second)
 		}
 	}
 }
@@ -340,8 +346,9 @@ func login() chromedp.Tasks {
 
 func getData() chromedp.Tasks {
 	return chromedp.Tasks{
-		chromedp.Click("#root > div > div.compassWrapper--3aIha > div.containerWrapper--kR6gq > div > div:nth-child(2) > div:nth-child(2) > div > div > div > div > div > div > div > div > div.title--eKQSF > a"),
-		chromedp.Click("#root > div > div.compassWrapper--3aIha > div.containerWrapper--kR6gq > div > div.ecom-spin-nested-loading > div > div > div.cardContainer--MZhpq > div > div.info--1VBeX > div.link--915CX.active--38eYL > div:nth-child(2)"),
+		chromedp.Navigate("https://compass.jinritemai.com/shop/live-analysis"),
+		chromedp.Sleep(2 * time.Second),
+		//chromedp.Click("#root > div > div.compassWrapper--3aIha > div.containerWrapper--kR6gq > div > div.ecom-spin-nested-loading > div > div > div.cardContainer--MZhpq > div > div.info--1VBeX > div.link--915CX.active--38eYL > div:nth-child(2)"),
 		run(),
 	}
 }

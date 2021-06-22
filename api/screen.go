@@ -6,7 +6,14 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"sync"
 )
+
+var m *sync.RWMutex
+
+func init() {
+	m = new(sync.RWMutex)
+}
 
 type ScreenBaseInfoResp struct {
 	St int `json:"st"`
@@ -129,8 +136,9 @@ func ScreenProductDetail(url string) (result ScreenProductDetailResp) {
 	json.Unmarshal(body, &result)
 	return
 }
-
 func ScreenSaveBaseInfo(roomId string, data ScreenBaseInfoRespData) (err error) {
+	m.Lock()
+	defer m.Unlock()
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -147,6 +155,8 @@ func ScreenSaveBaseInfo(roomId string, data ScreenBaseInfoRespData) (err error) 
 	return
 }
 func ScreenSaveProductDetail(roomId string, data ScreenProductDetailRespData) (err error) {
+	m.Lock()
+	defer m.Unlock()
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {

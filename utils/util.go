@@ -19,7 +19,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	//FolderPath = "."
+	FolderPath = "."
 }
 
 // KeepFloat64 保留几位小数
