@@ -49,9 +49,9 @@ func TimeFormat(format string, t time.Time) string {
 
 // CreateTimeFormat 日期转时间
 func CreateTimeFormat(format string, now string) time.Time {
-	loc, _ := time.LoadLocation("Asia/Shanghai")
+	//loc, _ := time.LoadLocation("Asia/Shanghai")
 	if format == time.RFC3339 {
-		t, _ := time.ParseInLocation(time.RFC3339, now, loc)
+		t, _ := time.Parse(time.RFC3339, now)
 		return t
 	} else {
 		format = strings.Replace(format, "Y", "2006", -1)
@@ -60,7 +60,7 @@ func CreateTimeFormat(format string, now string) time.Time {
 		format = strings.Replace(format, "H", "15", -1)
 		format = strings.Replace(format, "i", "04", -1)
 		format = strings.Replace(format, "s", "05", -1)
-		t, _ := time.ParseInLocation(format, now, loc)
+		t, _ := time.Parse(format, now)
 		return t
 	}
 }

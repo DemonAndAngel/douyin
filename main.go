@@ -183,7 +183,7 @@ func main() {
 		switch ev := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			req := ev.Request
-			if strings.Index(req.URL, "live_analysis") != -1 {
+			if strings.Index(req.URL, "live_quickview") != -1 {
 				liveAnalysisUrl = req.URL
 			}
 			break
@@ -207,7 +207,7 @@ func main() {
 	}
 	cancel()
 	// 获取所有直播间
-	resp := api.LiveAnalysis(liveAnalysisUrl)
+	resp := api.ListQuickview(liveAnalysisUrl)
 	if resp.St != 0 {
 		fmt.Println(resp.Msg)
 	}else{
@@ -346,8 +346,8 @@ func login() chromedp.Tasks {
 
 func getData() chromedp.Tasks {
 	return chromedp.Tasks{
-		chromedp.Navigate("https://compass.jinritemai.com/shop/live-analysis"),
-		chromedp.Sleep(2 * time.Second),
+		chromedp.Navigate("https://compass.jinritemai.com/shop/real-time"),
+		chromedp.Sleep(5 * time.Second),
 		//chromedp.Click("#root > div > div.compassWrapper--3aIha > div.containerWrapper--kR6gq > div > div.ecom-spin-nested-loading > div > div > div.cardContainer--MZhpq > div > div.info--1VBeX > div.link--915CX.active--38eYL > div:nth-child(2)"),
 		run(),
 	}

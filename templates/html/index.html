@@ -98,8 +98,8 @@
                             html += "<table class=\"table table-striped\">"
                             html += "<tr><th>累计观看人数</th><th>GMV</th><th>实时该刷多少钱（降）</th><th>预期UV价值</th><th>实时UV价值</th></tr>"
                             html += "<tr><td>"+base_info.online_user_ucnt.value+"</td><td>￥" + (base_info.gmv/100) + "</td>" +
-                                "<td style='color: #ff2b00'>￥" + (res.uv*base_info.online_user_ucnt.value-(base_info.gmv/100)) + " </td>" +
-                                "<td> " + res.uv + " </td><td style='color: #ff2f00'> " + (base_info.gmv/100/base_info.online_user_ucnt.value) + "</td></tr>"
+                                "<td style='color: #ff2b00'>￥" + calculateBrush(res.uv, base_info.gmv, base_info.online_user_ucnt.value) + " </td>" +
+                                "<td> " + res.uv + " </td><td style='color: #ff2f00'> " + calculateUV(base_info.gmv, base_info.online_user_ucnt.value) + "</td></tr>"
                             html += "</table>"
                             html += "<h3>商品列表</h3>"
                             html += "<table class=\"table table-striped\">"
@@ -128,6 +128,13 @@
                 setTimeout(function (){getData()}, 1000)
             },
         })
+    }
+
+    function calculateBrush(uv, gmv, cnt) {
+        return Math.round((uv*cnt-(gmv/100)) * 100) / 100
+    }
+    function calculateUV(gmv, cnt) {
+        return Math.round((gmv/100/cnt) * 100) / 100
     }
     function login() {
         $.ajax({
