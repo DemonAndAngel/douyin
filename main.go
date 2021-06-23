@@ -203,6 +203,7 @@ func getData() (err error) {
 			}
 		}
 	}
+	utils.MyApp.LastLiveDataTime = now
 	// 检测是否需要写入数据
 	if utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
 		for _, room := range list.Rooms {
@@ -220,13 +221,11 @@ func getData() (err error) {
 			b, _err := api.ScreenLoadBaseInfo(room.RoomId)
 			if _err != nil {
 				err = _err
-				_ = c.Close()
 				return
 			}
 			bo, _err := api.ScreenLoadRoomBoardV2(room.RoomId)
 			if _err != nil {
 				err = _err
-				_ = c.Close()
 				return
 			}
 			exposure := 0
@@ -261,14 +260,12 @@ func getData() (err error) {
 				utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
 				strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
 			})
-			_ = c.Close()
 			if err != nil {
 				return
 			}
 		}
 		utils.MyApp.LastSaveLiveDataTime = now
 	}
-	utils.MyApp.LastLiveDataTime = now
 	return
 }
 

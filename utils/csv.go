@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 )
+var MyCsvMap map[string]*Csv
 
 type Csv struct {
 	File *os.File
@@ -14,6 +15,10 @@ type Csv struct {
 	Name string
 	CreateTime time.Time
 	M *sync.RWMutex
+}
+
+func init() {
+	MyCsvMap = make(map[string]*Csv)
 }
 
 func NewCsv(filepath string, filename string, createTime time.Time, title []string) (c *Csv, err error) {
@@ -29,11 +34,15 @@ func NewCsv(filepath string, filename string, createTime time.Time, title []stri
 	if err != nil {
 		return
 	}
-	file, err := os.OpenFile(filepath + "/" + filename, os.O_APPEND, os.ModePerm)
+	path := filepath + "/" + filename
+	if cc, ok := MyCsvMap[path]; ok {
+		return cc, nil
+	}
+	file, err := os.OpenFile(path, os.O_APPEND, os.ModePerm)
 	b := false
 	if err != nil && os.IsNotExist(err) {
 		err = nil
-		file, err = os.Create(filepath + "/" + filename)
+		file, err = os.Create(path)
 		if err != nil {
 			return
 		}
@@ -60,6 +69,7 @@ func NewCsv(filepath string, filename string, createTime time.Time, title []stri
 		CreateTime: createTime,
 		M: new(sync.RWMutex),
 	}
+	MyCsvMap[path] = c
 	return
 }
 
