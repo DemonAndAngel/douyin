@@ -90,7 +90,7 @@
                             data = list[i]
                             base_info = data.base_info
                             if (base_info.title === "")  {
-                                return
+                                break
                             }
                             product_detail = data.product_detail
                             html += "<div class=\"mytable\">"
@@ -121,9 +121,8 @@
                             html += "</table>"
                             html += "</div>"
                         }
-                        // 定时器
-                        $table.html(html)
                     }
+                    $table.html(html)
                 }
                 setTimeout(function (){getData()}, 1000)
             },

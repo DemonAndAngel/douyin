@@ -8,18 +8,22 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var FolderPath = ""
 
+var m *sync.RWMutex
+
 func init() {
+	m = new(sync.RWMutex)
 	var err error
 	FolderPath, err = osext.ExecutableFolder()
 	if err != nil {
 		panic(err)
 	}
-	FolderPath = "."
+	//FolderPath = "."
 }
 
 // KeepFloat64 保留几位小数
@@ -92,6 +96,8 @@ type RoomUrlInfo struct {
 	ProductDetailUrl string `json:"product_detail_url"`
 }
 func SaveRoomInfoUrl(room RoomUrlInfo) (err error) {
+	m.Lock()
+	defer m.Unlock()
 	// 先取出来
 	rooms, err := GetRoomInfoUrls()
 	if err != nil {
