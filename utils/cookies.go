@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/chromedp"
 	"io/ioutil"
 	"os"
 )
@@ -58,6 +59,16 @@ type Cookie struct {
 //	}
 //	return
 //}
+func ChromedpLoadCookies() chromedp.ActionFunc {
+	return func(ctx context.Context) (err error) {
+		// 设置cookies
+		if len(LoadCookies()) > 0 {
+			return network.SetCookies(LoadCookies()).Do(ctx)
+		}
+		return
+	}
+}
+
 func LoadCookies() (cookies []*network.CookieParam) {
 	// 如果cookies临时文件不存在则直接跳过
 	if _, _err := os.Stat(FolderPath + "/tmp/cookies.tmp"); os.IsNotExist(_err) {

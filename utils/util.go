@@ -23,7 +23,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	//FolderPath = "."
+	FolderPath = "."
 }
 
 // KeepFloat64 保留几位小数
@@ -71,16 +71,16 @@ func CreateTimeFormat(format string, now string) time.Time {
 
 func SetUV(f float64) (err error) {
 	// 3. 存储到临时文件
-	if err = ioutil.WriteFile(FolderPath + "/tmp/uv.tmp", []byte(strconv.FormatFloat(f, 'E', -1, 64)), 0755); err != nil {
+	if err = ioutil.WriteFile(FolderPath + "/uv.tmp", []byte(strconv.FormatFloat(f, 'E', -1, 64)), 0755); err != nil {
 		return
 	}
 	return
 }
 func GetUV() (f float64, err error) {
-	if _, _err := os.Stat(FolderPath + "/tmp/uv.tmp"); os.IsNotExist(_err) {
+	if _, _err := os.Stat(FolderPath + "/uv.tmp"); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(FolderPath + "/tmp/uv.tmp")
+	b, err := ioutil.ReadFile(FolderPath + "/uv.tmp")
 	if err != nil {
 		return
 	}
