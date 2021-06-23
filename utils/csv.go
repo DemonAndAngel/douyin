@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/csv"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type Csv struct {
 	Path string
 	Name string
 	CreateTime time.Time
+	M *sync.RWMutex
 }
 
 func NewCsv(filepath string, filename string, createTime time.Time, title []string) (c *Csv, err error) {
@@ -44,7 +46,11 @@ func NewCsv(filepath string, filename string, createTime time.Time, title []stri
 	}
 	w := csv.NewWriter(file)
 	if b {
-		_ = w.Write(title)
+		err = w.Write(title)
+		w.Flush()
+		if err != nil {
+			return
+		}
 	}
 	c = &Csv{
 		File: file,
@@ -52,7 +58,29 @@ func NewCsv(filepath string, filename string, createTime time.Time, title []stri
 		Path: filepath,
 		Name: filename,
 		CreateTime: createTime,
+		M: new(sync.RWMutex),
 	}
+	return
+}
+
+func (c *Csv) Write(data []string) (err error) {
+	c.M.Lock()
+	defer c.M.Unlock()
+	err = c.W.Write(data)
+	if err != nil {
+		return
+	}
+	c.W.Flush()
+	return
+}
+func (c *Csv) WriteAll(datas [][]string) (err error) {
+	c.M.Lock()
+	defer c.M.Unlock()
+	err = c.W.WriteAll(datas)
+	if err != nil {
+		return
+	}
+	c.W.Flush()
 	return
 }
 

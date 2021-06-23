@@ -13,17 +13,29 @@ import (
 )
 
 var FolderPath = ""
+var QrcodePath = ""
+var CookiesPath = ""
+var RoomUrlInfoPath = ""
+var RoomsDataPath = ""
+var UVPath = ""
+var TemplatesPath = ""
 
-var m *sync.RWMutex
+var mRoomUrlInfo *sync.RWMutex
 
 func init() {
-	m = new(sync.RWMutex)
+	mRoomUrlInfo = new(sync.RWMutex)
 	var err error
 	FolderPath, err = osext.ExecutableFolder()
 	if err != nil {
 		panic(err)
 	}
-	FolderPath = "."
+	//FolderPath = "."
+	QrcodePath = FolderPath + "/tmp/qrcode.png"
+	CookiesPath = FolderPath + "/tmp/cookies.tmp"
+	RoomUrlInfoPath = FolderPath + "/tmp/room_url_info.tmp"
+	RoomsDataPath = FolderPath + "/tmp/rooms/%s"
+	UVPath = FolderPath + "/uv.tmp"
+	TemplatesPath = FolderPath + "/templates"
 }
 
 // KeepFloat64 保留几位小数
@@ -71,16 +83,16 @@ func CreateTimeFormat(format string, now string) time.Time {
 
 func SetUV(f float64) (err error) {
 	// 3. 存储到临时文件
-	if err = ioutil.WriteFile(FolderPath + "/uv.tmp", []byte(strconv.FormatFloat(f, 'E', -1, 64)), 0755); err != nil {
+	if err = ioutil.WriteFile(UVPath, []byte(strconv.FormatFloat(f, 'E', -1, 64)), 0755); err != nil {
 		return
 	}
 	return
 }
 func GetUV() (f float64, err error) {
-	if _, _err := os.Stat(FolderPath + "/uv.tmp"); os.IsNotExist(_err) {
+	if _, _err := os.Stat(UVPath); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(FolderPath + "/uv.tmp")
+	b, err := ioutil.ReadFile(UVPath)
 	if err != nil {
 		return
 	}
@@ -91,21 +103,46 @@ func GetUV() (f float64, err error) {
 }
 
 type RoomUrlInfo struct {
+	LiveUrl string `json:"live_url"`
+	Rooms []RoomsDataUrlInfo `json:"rooms_data_url_info"`
+}
+
+type RoomsDataUrlInfo struct {
+	Nickname string `json:"nickname"` // 昵称
+	StartTime time.Time `json:"start_time"` // 开播时间
 	RoomId string `json:"room_id"`
+	AppId int `json:"app_id"`
 	BaseInfoUrl string `json:"base_info_url"`
 	ProductDetailUrl string `json:"product_detail_url"`
+	LiveDetailUrl string `json:"live_detail_url"`
 }
-func SaveRoomInfoUrl(room RoomUrlInfo) (err error) {
-	m.Lock()
-	defer m.Unlock()
+func SaveRoomLiveUrl(url string) (err error) {
+	mRoomUrlInfo.Lock()
+	defer mRoomUrlInfo.Unlock()
 	// 先取出来
-	rooms, err := GetRoomInfoUrls()
+	info, err := GetRoomUrlInfo()
+	if err != nil {
+		return
+	}
+	// 再存
+	info.LiveUrl = url
+	b, _ := json.Marshal(info)
+	if err = ioutil.WriteFile(RoomUrlInfoPath, b, 0755); err != nil {
+		return
+	}
+	return
+}
+func SaveRoomsDataUrlInfo(room RoomsDataUrlInfo) (err error) {
+	mRoomUrlInfo.Lock()
+	defer mRoomUrlInfo.Unlock()
+	// 先取出来
+	info, err := GetRoomUrlInfo()
 	if err != nil {
 		return
 	}
 	// 再存
 	bo := false
-	for k, r := range rooms {
+	for k, r := range info.Rooms {
 		if r.RoomId == room.RoomId {
 			if room.BaseInfoUrl != "" {
 				r.BaseInfoUrl = room.BaseInfoUrl
@@ -113,47 +150,38 @@ func SaveRoomInfoUrl(room RoomUrlInfo) (err error) {
 			if room.ProductDetailUrl != "" {
 				r.ProductDetailUrl = room.ProductDetailUrl
 			}
-			rooms[k] = r
+			if room.LiveDetailUrl != "" {
+				r.LiveDetailUrl = room.LiveDetailUrl
+			}
+			if room.Nickname != "" {
+				r.Nickname = room.Nickname
+			}
+			if !room.StartTime.IsZero() {
+				r.StartTime = room.StartTime
+			}
+			info.Rooms[k] = r
 			bo = true
 			break
 		}
 	}
 	if !bo {
-		rooms = append(rooms, room)
+		info.Rooms = append(info.Rooms, room)
 	}
-	b, _ := json.Marshal(rooms)
-	if err = ioutil.WriteFile(FolderPath + "/tmp/room_url_info.tmp", b, 0755); err != nil {
+	b, _ := json.Marshal(info)
+	if err = ioutil.WriteFile(RoomUrlInfoPath, b, 0755); err != nil {
 		return
 	}
 	return
 }
-func GetRoomInfoUrls() (rooms []RoomUrlInfo, err error) {
-	if _, _err := os.Stat(FolderPath + "/tmp/room_url_info.tmp"); os.IsNotExist(_err) {
+func GetRoomUrlInfo() (info RoomUrlInfo, err error) {
+	if _, _err := os.Stat(RoomUrlInfoPath); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(FolderPath + "/tmp/room_url_info.tmp")
+	b, err := ioutil.ReadFile(RoomUrlInfoPath)
 	if err != nil {
 		return
 	}
 	// 反序列化
-	_ = json.Unmarshal(b, &rooms)
-	return
-}
-func SaveUpdatedAt(t time.Time) (err error) {
-	if err = ioutil.WriteFile(FolderPath + "/tmp/updated_at.tmp", []byte(TimeFormat("Y-m-d H:i:s", t)), 0755); err != nil {
-		return
-	}
-	return
-}
-func GetUpdatedAt() (t time.Time, err error) {
-	if _, _err := os.Stat(FolderPath + "/tmp/updated_at.tmp"); os.IsNotExist(_err) {
-		return
-	}
-	b, err := ioutil.ReadFile(FolderPath + "/tmp/updated_at.tmp")
-	if err != nil {
-		return
-	}
-	// 反序列化
-	t = CreateTimeFormat("Y-m-d H:i:s", string(b))
+	_ = json.Unmarshal(b, &info)
 	return
 }

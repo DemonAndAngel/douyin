@@ -26,39 +26,6 @@ type Cookie struct {
 	SourcePort int `json:"sourcePort"`
 }
 
-// LoadCookies 加载Cookies
-//func LoadCookies() (cookies []*http.Cookie) {
-//	// 如果cookies临时文件不存在则直接跳过
-//	if _, _err := os.Stat("./tmp/cookies.tmp"); os.IsNotExist(_err) {
-//		return
-//	}
-//	// 如果存在则读取cookies的数据
-//	cookiesData, err := ioutil.ReadFile("./tmp/cookies.tmp")
-//	if err != nil {
-//		return
-//	}
-//	// 反序列化
-//	cs := make(map[string][]Cookie)
-//	json.Unmarshal(cookiesData, &cs)
-//	cc, _ := cs["cookies"]
-//	for _, c := range cc {
-//		cookies = append(cookies, &http.Cookie{
-//			Name:       c.Name,
-//			Value:      c.Value,
-//			Path:       c.Path,
-//			Domain:     c.Domain,
-//			//Expires:    c.Expires,
-//			//RawExpires: ,
-//			//MaxAge:     ,
-//			Secure:     c.Secure,
-//			HttpOnly:   c.HTTPOnly,
-//			//SameSite:   ,
-//			//Raw:       ,
-//			//Unparsed:   nil,
-//		})
-//	}
-//	return
-//}
 func ChromedpLoadCookies() chromedp.ActionFunc {
 	return func(ctx context.Context) (err error) {
 		// 设置cookies
@@ -71,11 +38,11 @@ func ChromedpLoadCookies() chromedp.ActionFunc {
 
 func LoadCookies() (cookies []*network.CookieParam) {
 	// 如果cookies临时文件不存在则直接跳过
-	if _, _err := os.Stat(FolderPath + "/tmp/cookies.tmp"); os.IsNotExist(_err) {
+	if _, _err := os.Stat(CookiesPath); os.IsNotExist(_err) {
 		return
 	}
 	// 如果存在则读取cookies的数据
-	b, err := ioutil.ReadFile(FolderPath + "/tmp/cookies.tmp")
+	b, err := ioutil.ReadFile(CookiesPath)
 	if err != nil {
 		return
 	}
@@ -117,7 +84,7 @@ func SaveCookies(ctx context.Context) (err error) {
 		return
 	}
 	// 3. 存储到临时文件
-	if err = ioutil.WriteFile(FolderPath + "/tmp/cookies.tmp", b, 0755); err != nil {
+	if err = ioutil.WriteFile(CookiesPath, b, 0755); err != nil {
 		return
 	}
 	return

@@ -3,6 +3,7 @@ package api
 import (
 	"douyin/utils"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -136,6 +137,110 @@ func ScreenProductDetail(url string) (result ScreenProductDetailResp) {
 	json.Unmarshal(body, &result)
 	return
 }
+
+
+type ScreenRoomBoardV2Resp struct {
+	St int `json:"st"`
+	Msg string `json:"msg"`
+	Data ScreenRoomBoardV2RespData `json:"data"`
+}
+type ScreenRoomBoardV2RespData struct {
+	PopularityData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+	} `json:"popularity_data"`
+	ProductData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip,omitempty"`
+	} `json:"product_data"`
+	InteractiveData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value float64 `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip,omitempty"`
+	} `json:"interactive_data"`
+	TradeData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value float64 `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip,omitempty"`
+	} `json:"trade_data"`
+	AfterSaleData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value float64 `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip"`
+	} `json:"after_sale_data"`
+}
+
+func ScreenRoomBoardV2(url string) (result ScreenRoomBoardV2Resp) {
+	client := &http.Client{}
+	req := NewRequest("GET", url, nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	result.St = 500
+	json.Unmarshal(body, &result)
+	return
+}
+
+func ScreenSaveRoomBoardV2(roomId string, data ScreenRoomBoardV2RespData) (err error) {
+	m.Lock()
+	defer m.Unlock()
+	// 2. 序列化
+	b, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	// 3. 存储到临时文件
+	// 判断文件夹是否存在
+	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
+		_ = os.MkdirAll(path, os.ModePerm)
+	}
+	if err = ioutil.WriteFile(path + "/screen_room_board_v2.tmp", b, 0755); err != nil {
+		return
+	}
+	return
+}
+
+
 func ScreenSaveBaseInfo(roomId string, data ScreenBaseInfoRespData) (err error) {
 	m.Lock()
 	defer m.Unlock()
@@ -144,16 +249,18 @@ func ScreenSaveBaseInfo(roomId string, data ScreenBaseInfoRespData) (err error) 
 	if err != nil {
 		return
 	}
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
 	// 3. 存储到临时文件
 	// 判断文件夹是否存在
-	if _, _err := os.Stat(utils.FolderPath + "/tmp/rooms/" + roomId); _err != nil && os.IsNotExist(_err) {
-		_ = os.MkdirAll(utils.FolderPath + "/tmp/rooms/" + roomId, os.ModePerm)
+	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
+		_ = os.MkdirAll(path, os.ModePerm)
 	}
-	if err = ioutil.WriteFile(utils.FolderPath + "/tmp/rooms/" + roomId + "/screen_base_info.tmp", b, 0755); err != nil {
+	if err = ioutil.WriteFile(path + "/screen_base_info.tmp", b, 0755); err != nil {
 		return
 	}
 	return
 }
+
 func ScreenSaveProductDetail(roomId string, data ScreenProductDetailRespData) (err error) {
 	m.Lock()
 	defer m.Unlock()
@@ -164,20 +271,22 @@ func ScreenSaveProductDetail(roomId string, data ScreenProductDetailRespData) (e
 	}
 	// 3. 存储到临时文件
 	// 判断文件夹是否存在
-	if _, _err := os.Stat(utils.FolderPath + "/tmp/rooms/" + roomId); _err != nil && os.IsNotExist(_err) {
-		_ = os.MkdirAll(utils.FolderPath + "/tmp", os.ModePerm)
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
+		_ = os.MkdirAll(path, os.ModePerm)
 	}
-	if err = ioutil.WriteFile(utils.FolderPath + "/tmp/rooms/" + roomId + "/screen_product_detail.tmp", b, 0755); err != nil {
+	if err = ioutil.WriteFile(path + "/screen_product_detail.tmp", b, 0755); err != nil {
 		return
 	}
 	return
 }
 
 func ScreenLoadBaseInfo(roomId string) (data ScreenBaseInfoRespData, err error) {
-	if _, _err := os.Stat(utils.FolderPath + "/tmp/rooms/" + roomId + "/screen_base_info.tmp"); os.IsNotExist(_err) {
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	if _, _err := os.Stat(path + "/screen_base_info.tmp"); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(utils.FolderPath + "/tmp/rooms/" + roomId + "/screen_base_info.tmp")
+	b, err := ioutil.ReadFile(path + "/screen_base_info.tmp")
 	if err != nil {
 		return
 	}
@@ -186,10 +295,24 @@ func ScreenLoadBaseInfo(roomId string) (data ScreenBaseInfoRespData, err error) 
 	return
 }
 func ScreenLoadProductDetail(roomId string) (data ScreenProductDetailRespData, err error) {
-	if _, _err := os.Stat(utils.FolderPath + "/tmp/rooms/" + roomId + "/screen_product_detail.tmp"); os.IsNotExist(_err) {
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	if _, _err := os.Stat(path + "/screen_product_detail.tmp"); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(utils.FolderPath + "/tmp/rooms/" + roomId + "/screen_product_detail.tmp")
+	b, err := ioutil.ReadFile(path + "/screen_product_detail.tmp")
+	if err != nil {
+		return
+	}
+	// 反序列化
+	err = json.Unmarshal(b, &data)
+	return
+}
+func ScreenLoadRoomBoardV2(roomId string) (data ScreenRoomBoardV2RespData, err error) {
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	if _, _err := os.Stat(path + "/screen_room_board_v2.tmp"); os.IsNotExist(_err) {
+		return
+	}
+	b, err := ioutil.ReadFile(path + "/screen_room_board_v2.tmp")
 	if err != nil {
 		return
 	}
