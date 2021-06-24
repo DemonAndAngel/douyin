@@ -77,31 +77,24 @@ func main() {
 			if err != nil {
 				fmt.Println("check login error:" + err.Error())
 			}
-			if utils.MyApp.IsLogin {
-				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
-			}else{
-				time.Sleep(10 * time.Second)
-			}
-		}
-	}()
-	go func() {
-		// 监听并获取最新二维码
-		for {
-			if utils.MyApp.FirstLogin && !utils.MyApp.IsLogin && !utils.MyApp.QrcodeLatest && !utils.MyApp.CheckLogin {
-				//_ = os.Remove(utils.CookiesPath)
+			if !utils.MyApp.IsLogin {
+				fmt.Println("未登录 获取二维码")
+				_ = os.Remove(utils.CookiesPath)
 				_ = os.Remove(utils.QrcodePath)
 				err := getQrcode()
 				if err != nil {
 					fmt.Println("get qrcode error:" + err.Error())
 				}
+				time.Sleep(1 * time.Second)
+			}else{
+				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
 			}
-			time.Sleep(1 * time.Second)
 		}
 	}()
 	go func() {
 		// 更新直播间拉取地址
 		for {
-			if utils.MyApp.FirstLogin && utils.MyApp.IsLogin {
+			if utils.MyApp.IsLogin {
 				err := getLiveUrl()
 				if err != nil {
 					fmt.Println("get live url error:" + err.Error())
@@ -113,7 +106,7 @@ func main() {
 	go func() {
 		// 定时获取直播间列表
 		for {
-			if utils.MyApp.FirstLogin && utils.MyApp.IsLogin {
+			if utils.MyApp.IsLogin {
 				err := getLiveList()
 				if err != nil {
 					fmt.Println("get live list error:" + err.Error())
@@ -125,7 +118,7 @@ func main() {
 	go func() {
 		// 定时获取直播间数据地址
 		for {
-			if utils.MyApp.FirstLogin && utils.MyApp.IsLogin {
+			if utils.MyApp.IsLogin {
 				err := getLiveDataUrls()
 				if err != nil {
 					fmt.Println("get live data urls error:" + err.Error())
@@ -137,7 +130,7 @@ func main() {
 	go func() {
 		// 定时获取数据
 		for {
-			if utils.MyApp.FirstLogin && utils.MyApp.IsLogin {
+			if utils.MyApp.IsLogin {
 				err := getData()
 				if err != nil {
 					fmt.Println("get data error:" + err.Error())
@@ -533,12 +526,9 @@ func waitLogin() chromedp.ActionFunc {
 
 // 检测登录
 func checkLogin() error {
-	utils.MyApp.CheckLogin = true
 	url := ""
 	ctx, cancel, _ := genChromeCtx()
 	defer func() {
-		utils.MyApp.FirstLogin = true
-		utils.MyApp.CheckLogin = false
 		_ = chromedp.Cancel(ctx)
 		cancel()
 	}()
@@ -576,8 +566,8 @@ func genChromeCtx() (context.Context, context.CancelFunc, error) {
 		// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
 		append(
 			chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.Flag("headless", false),
-			//chromedp.Flag("blink-settings", "imagesEnabled=false"),
+			chromedp.Flag("headless", true),
+			chromedp.Flag("blink-settings", "imagesEnabled=false"),
 			chromedp.UserAgent(utils.MyConfig.System.UserAgent),
 		)...,
 	)
