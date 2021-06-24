@@ -87,7 +87,7 @@ func main() {
 				if err != nil {
 					fmt.Println("get qrcode error:" + err.Error())
 				}
-				time.Sleep(1 * time.Second)
+				time.Sleep(100 * time.Millisecond)
 			} else {
 				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
 			}
@@ -577,7 +577,7 @@ func waitLogin() chromedp.ActionFunc {
 			if end.Sub(now).Seconds() >= float64(utils.MyConfig.Interval.QrcodeExpireS) {
 				break
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Millisecond)
 		}
 		// 保存cookies
 		if b {

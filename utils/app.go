@@ -15,3 +15,27 @@ type App struct {
 	LastSaveLiveDataTime time.Time `json:"last_save_live_data_time"` // 最后一次写入数据间隔
 	LastSaveEXLiveDataTime time.Time `json:"last_save_ex_live_data_time"` // 最后一次写入数据间隔
 }
+
+type Data struct {
+	Title string `json:"title"`
+	UpdatedAt string `json:"updated_at"`
+	PayCnt string `json:"pay_cnt"`
+	PayUcnt string `json:"pay_ucnt"`
+	IncrFansCnt string `json:"incr_fans_cnt"`
+	OnlineUserUcnt string `json:"online_user_ucnt"`
+	Gmv string `json:"gmv"`
+	Exposure string `json:"exposure"`
+	Click string `json:"click"`
+	YinLiu string `json:"yin_liu"`
+	FYinLiu string `json:"f_yin_liu"`
+	SSSD string `json:"sssd"`
+	UV string `json:"uv"`
+	SUV string `json:"suv"`
+	OZHL string `json:"ozhl"`
+	CJRSZHL string `json:"cjrszhl"`
+	ZFL string `json:"zfl"`
+	GWCDJL string `json:"gwcdjl"`
+	KDJ string `json:"kdj"`
+	CJFSZB string `json:"cjfszb"`
+	RJKBSC string `json:"rjkbsc"`
+}

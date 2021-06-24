@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 func Run() {
@@ -14,10 +15,12 @@ func Run() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	// 加载html文件
-	r.LoadHTMLGlob(utils.TemplatesPath + "/html/*")
+	r.LoadHTMLGlob(utils.TemplatesPath + "/*.html")
 	r.Static("/js", utils.TemplatesPath + "/js")
 	r.Static("/css", utils.TemplatesPath + "/css")
+	r.Static("/img", utils.TemplatesPath + "/img")
 	r.Static("/tmp", utils.FolderPath + "/tmp")
+	r.StaticFile("/favicon.ico", utils.TemplatesPath + "/favicon.ico")
 	// 初始化路由
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{})
@@ -102,6 +105,87 @@ func Run() {
 			"updated_at": utils.TimeFormat("Y-m-d H:i:s", utils.MyApp.LastLiveDataTime),
 			"uv": f,
 		})
+	})
+	r.GET("/api/get/last/data", func(c *gin.Context) {
+		if !utils.MyApp.IsLogin {
+			c.JSON(http.StatusOK, gin.H{
+				"code": 4003,
+				"msg": "请登录",
+			})
+			return
+		}
+		// 遍历room数据
+		info, _ := utils.GetRoomUrlInfo()
+		// 先取出最后一场直播
+		uv, _ := utils.GetUV()
+		if len(info.Rooms) <= 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"code": 200,
+				"msg": "success",
+				"data": nil,
+			})
+			return
+		}else{
+			tmpTime := time.Time{}
+			index := 0
+			for k, r := range info.Rooms {
+				if r.RoomId != "" {
+					if r.StartTime.After(tmpTime) {
+						tmpTime = r.StartTime
+						index = k
+					}
+				}
+			}
+			room := info.Rooms[index]
+			b, _ := api.ScreenLoadBaseInfo(room.RoomId)
+			board, _ := api.ScreenLoadRoomBoardV2(room.RoomId)
+			exposure := 0
+			click := 0
+			for _, boo := range board.ProductData {
+				if boo.IndexDisplay == "商品曝光人数" {
+					exposure = boo.Value.Value
+				} else if boo.IndexDisplay == "商品点击人数" {
+					click = boo.Value.Value
+				}
+			}
+			if b.Title == "" {
+				c.JSON(http.StatusOK, gin.H{
+					"code": 200,
+					"msg": "success",
+					"data": nil,
+				})
+				return
+			}else{
+				c.JSON(http.StatusOK, gin.H{
+					"code": 200,
+					"msg": "success",
+					"data": utils.Data{
+						Title: 			b.Title,
+						UpdatedAt:      utils.TimeFormat("Y-m-d H:i:s", utils.MyApp.LastLiveDataTime),
+						PayCnt:         strconv.Itoa(b.PayCnt.Value),
+						PayUcnt:        strconv.Itoa(b.PayUcnt.Value),
+						IncrFansCnt:    strconv.Itoa(b.IncrFansCnt.Value),
+						OnlineUserUcnt: strconv.Itoa(b.OnlineUserUcnt.Value),
+						Gmv:            utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
+						Exposure:       strconv.Itoa(exposure),
+						Click:          strconv.Itoa(click),
+						YinLiu:         "",
+						FYinLiu:        "",
+						SSSD:           utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
+						UV:             utils.KeepFloat64ToString(uv, 2),
+						SUV:            utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
+						OZHL:           utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+						CJRSZHL:        utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+						ZFL:            utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+						GWCDJL:         utils.KeepFloat64ToString((float64(click)/float64(exposure))*100, 2) + "%",
+						KDJ:            utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
+						CJFSZB:         utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
+						RJKBSC:         strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
+					},
+				})
+				return
+			}
+		}
 	})
 	err := r.Run(fmt.Sprintf(":%d", utils.MyConfig.Server.Port)) // listen and serve on 0.0.0.0:8080
 	if err != nil {
