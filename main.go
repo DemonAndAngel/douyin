@@ -360,12 +360,18 @@ func getLiveDataUrls() (err error) {
 func getLiveList() (err error) {
 	// 检测时间是否满足
 	now := time.Now()
-	if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
-		return
-	}
 	info, err := utils.GetRoomUrlInfo()
 	if err != nil {
 		return
+	}
+	if len(info.Rooms) > 0 {
+		if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
+			return
+		}
+	}else{
+		if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < 5 {
+			return
+		}
 	}
 	if info.LiveUrl != "" {
 		// 更新数据
