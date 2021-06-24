@@ -211,7 +211,7 @@ func getData() (err error) {
 				err = _err
 				return
 			}
-			c, _err := getLiveCsv(room, "")
+			c, _err := getLiveCsv(room, strconv.FormatInt(utils.MyConfig.Interval.SaveS, 10))
 			if _err != nil {
 				err = _err
 				return
