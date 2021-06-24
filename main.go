@@ -58,6 +58,8 @@ func SetConfig() {
 			CheckLoginS:   viper.GetInt64("Interval.CheckLoginS"),
 			QrcodeExpireS: viper.GetInt64("Interval.QrcodeExpireS"),
 			UrlS:          viper.GetInt64("Interval.UrlS"),
+			SaveS:         viper.GetInt64("Interval.SaveS"),
+			SaveSEX: viper.GetInt64("Interval.SaveSEX"),
 		},
 		Server: utils.ConfigServer{
 			Port: viper.GetInt("Server.Port"),
@@ -86,7 +88,7 @@ func main() {
 					fmt.Println("get qrcode error:" + err.Error())
 				}
 				time.Sleep(1 * time.Second)
-			}else{
+			} else {
 				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
 			}
 		}
@@ -209,7 +211,7 @@ func getData() (err error) {
 				err = _err
 				return
 			}
-			c, _err := getLiveCsv(room)
+			c, _err := getLiveCsv(room, "")
 			if _err != nil {
 				err = _err
 				return
@@ -253,7 +255,7 @@ func getData() (err error) {
 				utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
 				utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
 				utils.KeepFloat64ToString((float64(click)/float64(exposure))*100, 2) + "%",
-				utils.KeepFloat64ToString(float64(b.Gmv) / 100 /float64(b.PayCnt.Value), 2),
+				utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
 				utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
 				strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
 			})
@@ -262,6 +264,69 @@ func getData() (err error) {
 			}
 		}
 		utils.MyApp.LastSaveLiveDataTime = now
+	}
+	if utils.MyConfig.Interval.SaveSEX != 0 {
+		if utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
+			for _, room := range list.Rooms {
+				uv, _err := utils.GetUV()
+				if _err != nil {
+					err = _err
+					return
+				}
+				c, _err := getLiveCsv(room, strconv.FormatInt(utils.MyConfig.Interval.SaveSEX, 10))
+				if _err != nil {
+					err = _err
+					return
+				}
+				// 拿数据
+				b, _err := api.ScreenLoadBaseInfo(room.RoomId)
+				if _err != nil {
+					err = _err
+					return
+				}
+				bo, _err := api.ScreenLoadRoomBoardV2(room.RoomId)
+				if _err != nil {
+					err = _err
+					return
+				}
+				exposure := 0
+				click := 0
+				for _, boo := range bo.ProductData {
+					if boo.IndexDisplay == "商品曝光人数" {
+						exposure = boo.Value.Value
+					} else if boo.IndexDisplay == "商品点击人数" {
+						click = boo.Value.Value
+					}
+				}
+				// 写
+				err = c.Write([]string{
+					utils.TimeFormat("Y-m-d H:i:s", now),
+					strconv.Itoa(b.PayCnt.Value),
+					strconv.Itoa(b.PayUcnt.Value),
+					strconv.Itoa(b.IncrFansCnt.Value),
+					strconv.Itoa(b.OnlineUserUcnt.Value),
+					utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
+					strconv.Itoa(exposure),
+					strconv.Itoa(click),
+					"",
+					"",
+					utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
+					utils.KeepFloat64ToString(uv, 2),
+					utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
+					utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+					utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+					utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+					utils.KeepFloat64ToString((float64(click)/float64(exposure))*100, 2) + "%",
+					utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
+					utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
+					strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
+				})
+				if err != nil {
+					return
+				}
+			}
+			utils.MyApp.LastSaveEXLiveDataTime = now
+		}
 	}
 	return
 }
@@ -365,7 +430,7 @@ func getLiveList() (err error) {
 		if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
 			return
 		}
-	}else{
+	} else {
 		if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < 5 {
 			return
 		}
@@ -464,7 +529,7 @@ func getQrcode() (err error) {
 }
 func waitLogin() chromedp.ActionFunc {
 	return func(ctx context.Context) (err error) {
-		defer func(){
+		defer func() {
 			utils.MyApp.QrcodeLatest = false
 		}()
 		// 1. 用于存储图片的字节切片
@@ -551,7 +616,7 @@ func checkLogin() error {
 	// 更新状态
 	if url != "" {
 		utils.MyApp.IsLogin = true
-	}else{
+	} else {
 		utils.MyApp.IsLogin = false
 	}
 	fmt.Println("%v", utils.MyApp)
@@ -584,9 +649,13 @@ func genChromeCtx() (context.Context, context.CancelFunc, error) {
 }
 
 // 获取直播专用csv对象
-func getLiveCsv(room utils.RoomsDataUrlInfo) (*utils.Csv, error) {
+func getLiveCsv(room utils.RoomsDataUrlInfo, h string) (*utils.Csv, error) {
 	now := time.Now()
-	return utils.NewCsv(utils.FolderPath+"/数据/"+room.Nickname+"_"+utils.TimeFormat("Ymd", room.StartTime),
+	path := utils.FolderPath+"/数据/"+room.Nickname+"_"+utils.TimeFormat("Ymd", room.StartTime)
+	if h != "" {
+		path = path + "_" + h
+	}
+	return utils.NewCsv(path,
 		"数据", now, []string{
 			"抓取时间",
 			"成交件数", "成交人数", "新增粉丝数", "累计观看人数", "GMV", "商品曝光人数", "商品点击人数", "引流品金额（低于10块）", "非引流品金额",

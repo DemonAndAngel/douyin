@@ -13,4 +13,5 @@ type App struct {
 	LastLiveListUrlsTime time.Time `json:"last_live_list_urls_time"` // 最后一次更新直播间列表数据地址时间
 	LastLiveDataTime     time.Time `json:"last_live_data_time"`      // 最后一次拉取数据时间
 	LastSaveLiveDataTime time.Time `json:"last_save_live_data_time"` // 最后一次写入数据间隔
+	LastSaveEXLiveDataTime time.Time `json:"last_save_ex_live_data_time"` // 最后一次写入数据间隔
 }
