@@ -77,14 +77,18 @@ func main() {
 			if err != nil {
 				fmt.Println("check login error:" + err.Error())
 			}
-			time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
+			if utils.MyApp.IsLogin {
+				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
+			}else{
+				time.Sleep(10 * time.Second)
+			}
 		}
 	}()
 	go func() {
 		// 监听并获取最新二维码
 		for {
-			if utils.MyApp.FirstLogin && !utils.MyApp.IsLogin && !utils.MyApp.QrcodeLatest {
-				_ = os.Remove(utils.CookiesPath)
+			if utils.MyApp.FirstLogin && !utils.MyApp.IsLogin && !utils.MyApp.QrcodeLatest && !utils.MyApp.CheckLogin {
+				//_ = os.Remove(utils.CookiesPath)
 				_ = os.Remove(utils.QrcodePath)
 				err := getQrcode()
 				if err != nil {
@@ -529,10 +533,12 @@ func waitLogin() chromedp.ActionFunc {
 
 // 检测登录
 func checkLogin() error {
+	utils.MyApp.CheckLogin = true
 	url := ""
 	ctx, cancel, _ := genChromeCtx()
 	defer func() {
 		utils.MyApp.FirstLogin = true
+		utils.MyApp.CheckLogin = false
 		_ = chromedp.Cancel(ctx)
 		cancel()
 	}()
@@ -558,6 +564,7 @@ func checkLogin() error {
 	}else{
 		utils.MyApp.IsLogin = false
 	}
+	fmt.Println("%v", utils.MyApp)
 	return err
 }
 
@@ -569,8 +576,8 @@ func genChromeCtx() (context.Context, context.CancelFunc, error) {
 		// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
 		append(
 			chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.Flag("headless", true),
-			chromedp.Flag("blink-settings", "imagesEnabled=false"),
+			chromedp.Flag("headless", false),
+			//chromedp.Flag("blink-settings", "imagesEnabled=false"),
 			chromedp.UserAgent(utils.MyConfig.System.UserAgent),
 		)...,
 	)

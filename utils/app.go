@@ -7,6 +7,7 @@ var MyApp *App
 
 type App struct {
 	IsLogin              bool      `json:"is_login"`                 // 用户登录状态
+	CheckLogin           bool `json:"check_login"` // 是否正在检测登录
 	QrcodeLatest         bool      `json:"qrcode_latest"`            // 二维码过期状态
 	FirstLogin           bool      `json:"first_login"`              // 程序是否经过第一次检测登录
 	LastLiveUrlTime      time.Time `json:"last_live_url_time"`       // 最后一次拉取直播间地址时间
