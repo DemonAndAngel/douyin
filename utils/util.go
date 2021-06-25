@@ -31,7 +31,7 @@ func init() {
 	}
 	//FolderPath = "."
 	QrcodePath = FolderPath + "/tmp/qrcode.png"
-	CookiesPath = FolderPath + "/tmp/cookies.tmp"
+	CookiesPath = FolderPath + "/cookies.tmp"
 	RoomUrlInfoPath = FolderPath + "/tmp/room_url_info.tmp"
 	RoomsDataPath = FolderPath + "/tmp/rooms/%s"
 	UVPath = FolderPath + "/uv.tmp"

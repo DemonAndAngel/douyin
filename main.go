@@ -46,10 +46,7 @@ func init() {
 	})
 	SetConfig()
 	// 清除 cookies 外所有数据
-	//os.RemoveAll(utils.FolderPath + "/tmp/rooms")
-	//os.Remove(utils.FolderPath + "/tmp/updated_at.tmp")
-	//os.Remove(utils.FolderPath + "/tmp/qrcode.png")
-	//os.Remove(utils.FolderPath + "/tmp/room_url_info.tmp")
+	os.RemoveAll(utils.FolderPath + "/tmp")
 }
 func SetConfig() {
 	utils.MyConfig = &utils.Config{
