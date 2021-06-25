@@ -102,7 +102,7 @@ func main() {
 					fmt.Println("get live url error:" + err.Error())
 				}
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 	go func() {
@@ -114,7 +114,7 @@ func main() {
 					fmt.Println("get live list error:" + err.Error())
 				}
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 	go func() {
@@ -126,7 +126,7 @@ func main() {
 					fmt.Println("get live data urls error:" + err.Error())
 				}
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 	go func() {
@@ -138,7 +138,7 @@ func main() {
 					fmt.Println("get data error:" + err.Error())
 				}
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(100 * time.Millisecond)
 		}
 	}()
 	http.Run()
@@ -499,10 +499,9 @@ func waitUrl(url *string, waitS int) chromedp.ActionFunc {
 		for {
 			end := time.Now()
 			if end.Sub(now).Seconds() > float64(waitS) || *url != "" {
-				// 五秒直接超时
 				break
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(10 * time.Millisecond)
 		}
 		return
 	}
