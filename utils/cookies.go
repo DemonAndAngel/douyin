@@ -36,6 +36,16 @@ func ChromedpLoadCookies() chromedp.ActionFunc {
 	}
 }
 
+func HasCookies() bool {
+	// 如果cookies临时文件不存在则直接跳过
+	_, err := os.Stat(CookiesPath)
+	if os.IsNotExist(err) {
+		return false
+	}else{
+		return true
+	}
+}
+
 func LoadCookies() (cookies []*network.CookieParam) {
 	// 如果cookies临时文件不存在则直接跳过
 	if _, _err := os.Stat(CookiesPath); os.IsNotExist(_err) {

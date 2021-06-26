@@ -22,6 +22,7 @@ import (
 
 func init() {
 	utils.MyApp = new(utils.App)
+	os.RemoveAll(utils.FolderPath + "/tmp")
 	// 创建临时文件夹
 	_, err := os.Stat(utils.FolderPath + "/tmp")
 	if err != nil && os.IsNotExist(err) {
@@ -45,8 +46,6 @@ func init() {
 		fmt.Println("Config file changed:", e.Name)
 	})
 	SetConfig()
-	// 清除 cookies 外所有数据
-	os.RemoveAll(utils.FolderPath + "/tmp")
 }
 func SetConfig() {
 	utils.MyConfig = &utils.Config{
@@ -587,6 +586,11 @@ func waitLogin() chromedp.ActionFunc {
 
 // 检测登录
 func checkLogin() error {
+	// 判断是否存在cookie
+	if !utils.HasCookies() {
+		utils.MyApp.IsLogin = false
+		return nil
+	}
 	url := ""
 	ctx, cancel, _ := genChromeCtx()
 	defer func() {
@@ -609,6 +613,9 @@ func checkLogin() error {
 		chromedp.Navigate("https://compass.jinritemai.com"),
 		waitUrl(&url, 10), // 等待10s
 	})
+	if err != nil {
+		return err
+	}
 	// 更新状态
 	if url != "" {
 		utils.MyApp.IsLogin = true
@@ -616,7 +623,7 @@ func checkLogin() error {
 		utils.MyApp.IsLogin = false
 	}
 	fmt.Println("%v", utils.MyApp)
-	return err
+	return nil
 }
 
 func genChromeCtx() (context.Context, context.CancelFunc, error) {
