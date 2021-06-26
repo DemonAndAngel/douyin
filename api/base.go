@@ -2,7 +2,6 @@ package api
 
 import (
 	"douyin/utils"
-	"github.com/spf13/viper"
 	"io"
 	"net/http"
 )
@@ -11,7 +10,7 @@ import (
 func NewRequest(method, url string, body io.Reader) *http.Request {
 	req, _ := http.NewRequest(method, url,body)
 	// 添加头
-	req.Header.Add("User-Agent", viper.GetString("System.UserAgent"))
+	req.Header.Add("User-Agent", utils.GenUserAgent().Value)
 	// 添加cookie
 	cookies := utils.LoadCookies()
 	for _, c := range cookies {

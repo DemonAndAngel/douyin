@@ -5,7 +5,6 @@ var MyConfig *Config
 type Config struct {
 	Interval ConfigInterval `json:"interval"`
 	Server   ConfigServer   `json:"server"`
-	System   ConfigSystem   `json:"system"`
 }
 type ConfigInterval struct {
 	GrabS         int64 `json:"grab_s"`
@@ -17,7 +16,4 @@ type ConfigInterval struct {
 }
 type ConfigServer struct {
 	Port int `json:"port"`
-}
-type ConfigSystem struct {
-	UserAgent string `json:"user_agent"`
 }

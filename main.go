@@ -65,9 +65,6 @@ func SetConfig() {
 		Server: utils.ConfigServer{
 			Port: viper.GetInt("Server.Port"),
 		},
-		System: utils.ConfigSystem{
-			UserAgent: `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.128 Safari/537.36`,
-		},
 	}
 }
 
@@ -88,7 +85,7 @@ func main() {
 				if err != nil {
 					fmt.Println("get qrcode error:" + err.Error())
 				}
-				time.Sleep(100 * time.Millisecond)
+				// 立马检测登录
 			} else {
 				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
 			}
@@ -122,7 +119,7 @@ func main() {
 	go func() {
 		// 定时获取直播间数据地址
 		for {
-			if utils.MyApp.IsLogin {
+			if utils.MyApp.IsLogin && utils.MyApp.PlayInfo.RoomID != "" {
 				err := getLiveDataUrls()
 				if err != nil {
 					fmt.Println("get live data urls error:" + err.Error())
@@ -380,85 +377,83 @@ func getLiveDataUrls() (err error) {
 		return
 	}
 	info := utils.MyApp.PlayInfo
-	if info.RoomID != "" {
-		// 拼接浏览器地址
-		data := make(map[string]interface{})
-		data["live_room_id"] = info.RoomID
-		data["live_app_id"] = strconv.Itoa(info.UserApp)
-		data["source"] = "baiying_live_data"
-		pB, _ := json.Marshal(data)
-		params := string(pB)
-		winUrl := `https://compass.jinritemai.com/business_api/home/buyin_redirect/15101` + fmt.Sprintf("?params=%s", url.QueryEscape(params))
-		baseUrl := ""
-		proUrl := ""
-		detailUrl := ""
-		ctx, cancel, _ := genChromeCtx()
-		// 添加监听
-		chromedp.ListenTarget(ctx, func(ev interface{}) {
-			switch ev := ev.(type) {
-			case *network.EventRequestWillBeSent:
-				req := ev.Request
-				if strings.Index(req.URL, "business_api/author/screen/base_info") != -1 {
-					baseUrl = req.URL
-					// 解析url并存储数据
-					pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-						BaseInfoUrl:                req.URL,
-						ProductDetailUrl:           "",
-						LiveDetailUrl:              "",
-					}, "ROOM_DATA_URL")
-					if err != nil {
-						fmt.Println(err)
-					}
-					utils.MyApp.PlayInfo = pageInfo
-				} else if strings.Index(req.URL, "business_api/author/screen/product_detail") != -1 {
-					proUrl = req.URL
-					// 解析url并存储数据
-					pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-						BaseInfoUrl:                "",
-						ProductDetailUrl:           req.URL,
-						LiveDetailUrl:              "",
-					}, "ROOM_DATA_URL")
-					if err != nil {
-						fmt.Println(err)
-					}
-					utils.MyApp.PlayInfo = pageInfo
-				} else if strings.Index(req.URL, "api/livepc/data/room/overview") != -1 {
-					detailUrl = req.URL
-					// 解析url并存储数据
-					pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-						BaseInfoUrl:                "",
-						ProductDetailUrl:           "",
-						LiveDetailUrl:              req.URL,
-					}, "ROOM_DATA_URL")
-					if err != nil {
-						fmt.Println(err)
-					}
-					utils.MyApp.PlayInfo = pageInfo
+	// 拼接浏览器地址
+	data := make(map[string]interface{})
+	data["live_room_id"] = info.RoomID
+	data["live_app_id"] = strconv.Itoa(info.UserApp)
+	data["source"] = "baiying_live_data"
+	pB, _ := json.Marshal(data)
+	params := string(pB)
+	winUrl := `https://compass.jinritemai.com/business_api/home/buyin_redirect/15101` + fmt.Sprintf("?params=%s", url.QueryEscape(params))
+	baseUrl := ""
+	proUrl := ""
+	detailUrl := ""
+	ctx, cancel, _ := genChromeCtx()
+	// 添加监听
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch ev := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			req := ev.Request
+			if strings.Index(req.URL, "business_api/author/screen/base_info") != -1 {
+				baseUrl = req.URL
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:                req.URL,
+					ProductDetailUrl:           "",
+					LiveDetailUrl:              "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
 				}
-				break
+				utils.MyApp.PlayInfo = pageInfo
+			} else if strings.Index(req.URL, "business_api/author/screen/product_detail") != -1 {
+				proUrl = req.URL
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:                "",
+					ProductDetailUrl:           req.URL,
+					LiveDetailUrl:              "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
+			} else if strings.Index(req.URL, "api/livepc/data/room/overview") != -1 {
+				detailUrl = req.URL
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:                "",
+					ProductDetailUrl:           "",
+					LiveDetailUrl:              req.URL,
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
 			}
-			// other needed network Event
-		})
-		err = chromedp.Run(ctx, &chromedp.Tasks{
-			chromedp.Navigate(winUrl),
-			waitUrl(&baseUrl, 10), // 等待url获取
-			waitUrl(&proUrl, 10),  // 等待url获取
-		})
-		if err != nil {
-			cancel()
-			return
+			break
 		}
-		err = chromedp.Run(ctx, &chromedp.Tasks{
-			chromedp.Navigate("https://buyin.jinritemai.com/mpa/account/login?log_out=1&type=24"),
-			chromedp.Navigate(`https://buyin.jinritemai.com/dashboard/livedata/detail` + fmt.Sprintf("?room_id=%s", info.RoomID)),
-			waitUrl(&detailUrl, 10), // 等待url获取
-		})
+		// other needed network Event
+	})
+	err = chromedp.Run(ctx, &chromedp.Tasks{
+		chromedp.Navigate(winUrl),
+		waitUrl(&baseUrl, 10), // 等待url获取
+		waitUrl(&proUrl, 10),  // 等待url获取
+	})
+	if err != nil {
 		cancel()
-		if err != nil {
-			return
-		}
-		utils.MyApp.LastLiveListUrlsTime = now
+		return
 	}
+	err = chromedp.Run(ctx, &chromedp.Tasks{
+		chromedp.Navigate("https://buyin.jinritemai.com/mpa/account/login?log_out=1&type=24"),
+		chromedp.Navigate(`https://buyin.jinritemai.com/dashboard/livedata/detail` + fmt.Sprintf("?room_id=%s", info.RoomID)),
+		waitUrl(&detailUrl, 10), // 等待url获取
+	})
+	cancel()
+	if err != nil {
+		return
+	}
+	utils.MyApp.LastLiveListUrlsTime = now
 	return
 }
 
@@ -527,18 +522,39 @@ func waitLogin() chromedp.ActionFunc {
 		}
 		utils.MyApp.QrcodeLatest = true
 		// 检测二维码是否过期
+		b := false
 		now := time.Now()
 		for {
 			end := time.Now()
 			// 判断是否登录成功
-			_ = checkLogin()
-			if utils.MyApp.IsLogin || end.Sub(now).Seconds() >= float64(utils.MyConfig.Interval.QrcodeExpireS) {
+			if err := chromedp.OuterHTML("html", &html).Do(ctx); err == nil {
+				if dom, err := goquery.NewDocumentFromReader(strings.NewReader(html)); err == nil {
+					if dom.Find("#portal > section > header > div > div.header-btns > div > div > div.btn-item-role-exchange-name > span").Length() > 0 {
+						// 成功登录
+						b = true
+						break
+					}
+				}
+			}
+			if end.Sub(now).Seconds() >= float64(utils.MyConfig.Interval.QrcodeExpireS) {
 				break
 			}
-			time.Sleep(1 * time.Second)
+			//// 保存cookies
+			//if err = utils.SaveCookies(ctx); err != nil {
+			//	return
+			//}
+			//// 用新的cookies去请求
+			//err = checkLogin()
+			//if err != nil {
+			//	return
+			//}
+			//if utils.MyApp.IsLogin || end.Sub(now).Seconds() >= float64(utils.MyConfig.Interval.QrcodeExpireS) {
+			//	break
+			//}
+			time.Sleep(100 * time.Millisecond)
 		}
-		// 保存cookies
-		if utils.MyApp.IsLogin {
+		if b {
+			// 保存cookies
 			if err = utils.SaveCookies(ctx); err != nil {
 				return
 			}
@@ -555,6 +571,7 @@ func checkLogin() error {
 		return nil
 	}
 	result := api.GetUser()
+	fmt.Println("result", result)
 	if result.St != 0 || result.Code != 0 || result.Data.UserRole == 0 {
 		utils.MyApp.IsLogin = false
 	}else{
@@ -573,7 +590,7 @@ func genChromeCtx() (context.Context, context.CancelFunc, error) {
 			chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.Flag("headless", true),
 			chromedp.Flag("blink-settings", "imagesEnabled=false"),
-			chromedp.UserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.128 Safari/537.36"),
+			chromedp.UserAgent(utils.GenUserAgent().Value),
 		)...,
 	)
 	ctx, _ = chromedp.NewContext(

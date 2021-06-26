@@ -39,6 +39,36 @@ func init() {
 	//RoomUrlInfoPath = FolderPath + "/tmp/room_url_info.tmp"
 }
 
+type UserAgentInfo struct {
+	Value string `json:"value"`
+	CreatedAt time.Time `json:"created_at"`
+	Index int `json:"index"`
+}
+var UserAgent *UserAgentInfo
+var US = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/89.0.4389.128 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36 Edg/91.0.864.59",
+}
+func GenUserAgent() *UserAgentInfo {
+	now := time.Now()
+	index := 0
+	if UserAgent != nil {
+		if now.Sub(UserAgent.CreatedAt).Hours() < 3 {
+			return UserAgent
+		}
+		index = UserAgent.Index + 1
+		if index >= len(US) {
+			index = 0
+		}
+	}
+	UserAgent = &UserAgentInfo{
+		Value: US[index],
+		CreatedAt: now,
+		Index: index,
+	}
+	return UserAgent
+}
+
 // KeepFloat64 保留几位小数
 func KeepFloat64(val float64, num int) float64 {
 	r, _ := strconv.ParseFloat(KeepFloat64ToString(val, num), 64)
