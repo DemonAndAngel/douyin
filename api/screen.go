@@ -10,10 +10,14 @@ import (
 	"sync"
 )
 
-var m *sync.RWMutex
+var baseInfoM *sync.RWMutex
+var productDetailM *sync.RWMutex
+var overviewM *sync.RWMutex
 
 func init() {
-	m = new(sync.RWMutex)
+	baseInfoM = new(sync.RWMutex)
+	productDetailM = new(sync.RWMutex)
+	overviewM = new(sync.RWMutex)
 }
 
 type ScreenBaseInfoResp struct {
@@ -138,75 +142,50 @@ func ScreenProductDetail(url string) (result ScreenProductDetailResp) {
 	return
 }
 
-
-type ScreenRoomBoardV2Resp struct {
+type ScreenRoomOverviewResp struct {
 	St int `json:"st"`
 	Msg string `json:"msg"`
-	Data ScreenRoomBoardV2RespData `json:"data"`
+	Data ScreenRoomOverviewRespData `json:"data"`
+	Extra struct {
+		LogID string `json:"log_id"`
+		Now int64 `json:"now"`
+	} `json:"extra"`
 }
-type ScreenRoomBoardV2RespData struct {
-	PopularityData []struct {
-		IndexDisplay string `json:"index_display"`
-		Value struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"value"`
-		ChangeValue struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"change_value"`
-	} `json:"popularity_data"`
-	ProductData []struct {
-		IndexDisplay string `json:"index_display"`
-		Value struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"value"`
-		ChangeValue struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"change_value"`
-		IndexTip string `json:"index_tip,omitempty"`
-	} `json:"product_data"`
-	InteractiveData []struct {
-		IndexDisplay string `json:"index_display"`
-		Value struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"value"`
-		ChangeValue struct {
-			Value float64 `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"change_value"`
-		IndexTip string `json:"index_tip,omitempty"`
-	} `json:"interactive_data"`
-	TradeData []struct {
-		IndexDisplay string `json:"index_display"`
-		Value struct {
-			Value float64 `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"value"`
-		ChangeValue struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"change_value"`
-		IndexTip string `json:"index_tip,omitempty"`
-	} `json:"trade_data"`
-	AfterSaleData []struct {
-		IndexDisplay string `json:"index_display"`
-		Value struct {
-			Value int `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"value"`
-		ChangeValue struct {
-			Value float64 `json:"value"`
-			Unit string `json:"unit"`
-		} `json:"change_value"`
-		IndexTip string `json:"index_tip"`
-	} `json:"after_sale_data"`
+type ScreenRoomOverviewRespData struct {
+	FlowStats struct {
+		AvgOnlineUv int `json:"avg_online_uv"`
+		AvgWatchDuration int `json:"avg_watch_duration"`
+		FansAvgWatchDuration int `json:"fans_avg_watch_duration"`
+		MaxOnlineUv int `json:"max_online_uv"`
+		RtOnlineUv int `json:"rt_online_uv"`
+		WatchPv int `json:"watch_pv"`
+		WatchUv int `json:"watch_uv"`
+	} `json:"flow_stats"`
+	InteractionStats struct {
+		CommentNum int `json:"comment_num"`
+		IncrFansNum int `json:"incr_fans_num"`
+		LikeNum int `json:"like_num"`
+		ShareNum int `json:"share_num"`
+	} `json:"interaction_stats"`
+	LiveStatus int `json:"live_status"`
+	OrderStats struct {
+		FansPayInLiveGmvRatio float64 `json:"fans_pay_in_live_gmv_ratio"`
+		FansPayInLiveNumRatio float64 `json:"fans_pay_in_live_num_ratio"`
+		PayInLiveGmv int `json:"pay_in_live_gmv"`
+		PayInLiveNum int `json:"pay_in_live_num"`
+		PayInLiveNumRatio float64 `json:"pay_in_live_num_ratio"`
+	} `json:"order_stats"`
+	ProductStats struct {
+		ClickUv int `json:"click_uv"`
+		FansClickUvRatio int `json:"fans_click_uv_ratio"`
+		FansPayInLiveUvRatio float64 `json:"fans_pay_in_live_uv_ratio"`
+		FansShowUvRatio int `json:"fans_show_uv_ratio"`
+		PayInLiveUv int `json:"pay_in_live_uv"`
+		ShowUv int `json:"show_uv"`
+	} `json:"product_stats"`
+	UpdateTs int `json:"update_ts"`
 }
-
-func ScreenRoomBoardV2(url string) (result ScreenRoomBoardV2Resp) {
+func ScreenRoomOverview(url string) (result ScreenRoomOverviewResp) {
 	client := &http.Client{}
 	req := NewRequest("GET", url, nil)
 	resp, err := client.Do(req)
@@ -219,10 +198,9 @@ func ScreenRoomBoardV2(url string) (result ScreenRoomBoardV2Resp) {
 	json.Unmarshal(body, &result)
 	return
 }
-
-func ScreenSaveRoomBoardV2(roomId string, data ScreenRoomBoardV2RespData) (err error) {
-	m.Lock()
-	defer m.Unlock()
+func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData) (err error) {
+	overviewM.Lock()
+	defer overviewM.Unlock()
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -234,7 +212,7 @@ func ScreenSaveRoomBoardV2(roomId string, data ScreenRoomBoardV2RespData) (err e
 	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
 		_ = os.MkdirAll(path, os.ModePerm)
 	}
-	if err = ioutil.WriteFile(path + "/screen_room_board_v2.tmp", b, 0755); err != nil {
+	if err = ioutil.WriteFile(path + "/screen_room_overview.tmp", b, 0755); err != nil {
 		return
 	}
 	return
@@ -242,8 +220,8 @@ func ScreenSaveRoomBoardV2(roomId string, data ScreenRoomBoardV2RespData) (err e
 
 
 func ScreenSaveBaseInfo(roomId string, data ScreenBaseInfoRespData) (err error) {
-	m.Lock()
-	defer m.Unlock()
+	baseInfoM.Lock()
+	defer baseInfoM.Unlock()
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -262,8 +240,8 @@ func ScreenSaveBaseInfo(roomId string, data ScreenBaseInfoRespData) (err error) 
 }
 
 func ScreenSaveProductDetail(roomId string, data ScreenProductDetailRespData) (err error) {
-	m.Lock()
-	defer m.Unlock()
+	productDetailM.Lock()
+	defer productDetailM.Unlock()
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {
@@ -307,12 +285,12 @@ func ScreenLoadProductDetail(roomId string) (data ScreenProductDetailRespData, e
 	err = json.Unmarshal(b, &data)
 	return
 }
-func ScreenLoadRoomBoardV2(roomId string) (data ScreenRoomBoardV2RespData, err error) {
+func ScreenLoadRoomOverview(roomId string) (data ScreenRoomOverviewRespData, err error) {
 	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
-	if _, _err := os.Stat(path + "/screen_room_board_v2.tmp"); os.IsNotExist(_err) {
+	if _, _err := os.Stat(path + "/screen_room_overview.tmp"); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(path + "/screen_room_board_v2.tmp")
+	b, err := ioutil.ReadFile(path + "/screen_room_overview.tmp")
 	if err != nil {
 		return
 	}

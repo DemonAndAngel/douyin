@@ -5,6 +5,39 @@ import (
 	"io/ioutil"
 	"net/http"
 )
+type LivePlayInfoResp struct {
+	Code int `json:"code"`
+	Data LivePlayInfoRespData `json:"data"`
+	Extra struct {
+		LogID string `json:"log_id"`
+		Now int64 `json:"now"`
+	} `json:"extra"`
+	Msg string `json:"msg"`
+	St int `json:"st"`
+}
+type LivePlayInfoRespData struct {
+	NickName string `json:"nick_name"`
+	UserAvatar string `json:"user_avatar"`
+	StreamURL string `json:"stream_url"`
+	UserApp int `json:"user_app"`
+	RoomID string `json:"room_id"`
+	QrcodeSchemaURL string `json:"qrcode_schema_url"`
+	HasReleasedFissionActivity bool `json:"has_released_fission_activity"`
+}
+func LivePlayInfo(url string) (result LivePlayInfoResp) {
+	client := &http.Client{}
+	req := NewRequest("GET", url, nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(nil)
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	result.St = 500
+	json.Unmarshal(body, &result)
+	return
+}
+
 type ListQuickviewResp struct {
 	St int `json:"st"`
 	Msg string `json:"msg"`

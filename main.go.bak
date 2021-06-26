@@ -3,22 +3,17 @@ package main
 import (
 	"context"
 	"douyin/api"
+	http "douyin/server"
 	"douyin/utils"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/cdproto/network"
-	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 	"github.com/fsnotify/fsnotify"
-	"github.com/gin-gonic/gin"
 	"github.com/spf13/viper"
 	"log"
-	"net/http"
-	"net/http/httptest"
-	urlPkg "net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -26,11 +21,13 @@ import (
 )
 
 func init() {
+	utils.MyApp = new(utils.App)
+	os.RemoveAll(utils.FolderPath + "/tmp")
 	// 创建临时文件夹
 	_, err := os.Stat(utils.FolderPath + "/tmp")
 	if err != nil && os.IsNotExist(err) {
 		err = nil
-		err = os.MkdirAll(utils.FolderPath + "/tmp", os.ModePerm)
+		err = os.MkdirAll(utils.FolderPath+"/tmp", os.ModePerm)
 	}
 	if err != nil {
 		panic(err)
@@ -45,221 +42,348 @@ func init() {
 	}
 	viper.WatchConfig()
 	viper.OnConfigChange(func(e fsnotify.Event) {
+		SetConfig()
 		fmt.Println("Config file changed:", e.Name)
 	})
-	// 清除 cookies 外所有数据
-	os.RemoveAll(utils.FolderPath + "/tmp/rooms")
-	//os.Remove(utils.FolderPath + "/tmp/uv.tmp")
-	os.Remove(utils.FolderPath + "/tmp/updated_at.tmp")
-	os.Remove(utils.FolderPath + "/tmp/qrcode.png")
-	os.Remove(utils.FolderPath + "/tmp/room_url_info.tmp")
+	SetConfig()
+}
+func SetConfig() {
+	utils.MyConfig = &utils.Config{
+		Interval: utils.ConfigInterval{
+			GrabS:         viper.GetInt64("Interval.GrabS"),
+			CheckLoginS:   viper.GetInt64("Interval.CheckLoginS"),
+			QrcodeExpireS: viper.GetInt64("Interval.QrcodeExpireS"),
+			UrlS:          viper.GetInt64("Interval.UrlS"),
+			SaveS:         viper.GetInt64("Interval.SaveS"),
+			SaveSEX: viper.GetInt64("Interval.SaveSEX"),
+		},
+		Server: utils.ConfigServer{
+			Port: viper.GetInt("Server.Port"),
+		},
+		System: utils.ConfigSystem{
+			UserAgent: viper.GetString("System.UserAgent"),
+		},
+	}
 }
 
-var isLogin = false
-var qrcodeLatest = false
-var liveAnalysisUrl = ""
-
 func main() {
+	// 运行协程
 	go func() {
-		// 开启gin服务
-		r := gin.Default()
-		// 加载html文件
-		r.LoadHTMLGlob(utils.FolderPath + "/templates/html/*")
-		r.Static("/js", utils.FolderPath + "/templates/js")
-		r.Static("/css", utils.FolderPath + "/templates/css")
-		r.Static("/tmp/img", utils.FolderPath + "/tmp")
-		// 初始化路由
-		r.GET("/", func(c *gin.Context) {
-			c.HTML(http.StatusOK, "index.html", gin.H{})
-		})
-		// 获取登录二维码
-		r.GET("/api/get/qrcode", func(c *gin.Context) {
-			// 直接读取图片数据返回
-			// 判断二维码是否最新
-			if qrcodeLatest {
-				c.JSON(http.StatusOK, gin.H{
-					"code": 200,
-					"msg": "success",
-					"qrcodeLatest": qrcodeLatest,
-					"isLogin": isLogin,
-				})
-			}else if isLogin {
-				// 等待
-				c.JSON(http.StatusOK, gin.H{
-					"code": 200,
-					"msg": "已登录",
-					"qrcodeLatest": qrcodeLatest,
-					"isLogin": isLogin,
-				})
-			}else{
-				// 等待
-				c.JSON(http.StatusOK, gin.H{
-					"code": 8888,
-					"msg": "请等待二维码抓取",
-					"qrcodeLatest": qrcodeLatest,
-					"isLogin": isLogin,
-				})
+		// 定时检查用户登录状态
+		for {
+			err := checkLogin()
+			if err != nil {
+				fmt.Println("check login error:" + err.Error())
 			}
-		})
+			if !utils.MyApp.IsLogin {
+				fmt.Println("未登录 获取二维码")
+				_ = os.Remove(utils.CookiesPath)
+				_ = os.Remove(utils.QrcodePath)
+				err := getQrcode()
+				if err != nil {
+					fmt.Println("get qrcode error:" + err.Error())
+				}
+				time.Sleep(100 * time.Millisecond)
+			} else {
+				time.Sleep(time.Duration(utils.MyConfig.Interval.CheckLoginS) * time.Second)
+			}
+		}
+	}()
+	go func() {
+		// 更新直播间拉取地址
+		for {
+			if utils.MyApp.IsLogin {
+				err := getLiveUrl()
+				if err != nil {
+					fmt.Println("get live url error:" + err.Error())
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+	go func() {
+		// 定时获取直播间列表
+		for {
+			if utils.MyApp.IsLogin {
+				err := getLiveList()
+				if err != nil {
+					fmt.Println("get live list error:" + err.Error())
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+	go func() {
+		// 定时获取直播间数据地址
+		for {
+			if utils.MyApp.IsLogin {
+				err := getLiveDataUrls()
+				if err != nil {
+					fmt.Println("get live data urls error:" + err.Error())
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+	go func() {
+		// 定时获取数据
+		for {
+			if utils.MyApp.IsLogin {
+				err := getData()
+				if err != nil {
+					fmt.Println("get data error:" + err.Error())
+				}
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}()
+	http.Run()
+}
 
-		// 检查登录状态
-		r.GET("/api/login/status", func(c *gin.Context) {
-			if !isLogin {
-				c.JSON(http.StatusOK, gin.H{
-					"code": 4003,
-					"msg": "请登录",
-				})
-			}else{
-				c.JSON(http.StatusOK, gin.H{
-					"code": 200,
-					"msg": "success",
-				})
+func getData() (err error) {
+	// 检测时间是否满足
+	now := time.Now()
+	if !utils.MyApp.LastLiveDataTime.IsZero() && now.Sub(utils.MyApp.LastLiveDataTime).Seconds() < float64(utils.MyConfig.Interval.GrabS) {
+		return
+	}
+	list, err := utils.GetRoomUrlInfo()
+	if err != nil {
+		return
+	}
+	if len(list.Rooms) <= 0 {
+		return
+	}
+	for _, room := range list.Rooms {
+		if room.BaseInfoUrl == "" || room.ProductDetailUrl == "" || room.LiveDetailUrl == "" {
+			return
+		}
+		if room.BaseInfoUrl != "" {
+			bResp := api.ScreenBaseInfo(room.BaseInfoUrl)
+			if bResp.St != 0 {
+				err = errors.New(bResp.Msg)
+				return
+			} else {
+				// 存数据
+				err = api.ScreenSaveBaseInfo(room.RoomId, bResp.Data)
+				if err != nil {
+					return
+				}
 			}
-		})
-		r.POST("/api/set/uv", func(c *gin.Context) {
-			// 设置预期uv值
-			str := c.PostForm("uv")
-			f, _ := strconv.ParseFloat(str, 64)
-			_ = utils.SetUV(f)
-			c.JSON(http.StatusOK, gin.H{})
-		})
-		// 获取数据
-		r.GET("/api/get/data", func(c *gin.Context) {
-			if !isLogin {
-				c.JSON(http.StatusOK, gin.H{
-					"code": 4003,
-					"msg": "请登录",
-				})
+		}
+		if room.ProductDetailUrl != "" {
+			pResp := api.ScreenProductDetail(room.ProductDetailUrl)
+			if pResp.St != 0 {
+				err = errors.New(pResp.Msg)
+				return
+			} else {
+				// 存数据
+				err = api.ScreenSaveProductDetail(room.RoomId, pResp.Data)
+				if err != nil {
+					return
+				}
+			}
+		}
+		if room.LiveDetailUrl != "" {
+			dResp := api.ScreenRoomBoardV2(room.LiveDetailUrl)
+			if dResp.St != 0 {
+				err = errors.New(dResp.Msg)
+				return
+			} else {
+				// 存数据
+				err = api.ScreenSaveRoomBoardV2(room.RoomId, dResp.Data)
+				if err != nil {
+					err = errors.New(dResp.Msg)
+					return
+				}
+			}
+		}
+	}
+	utils.MyApp.LastLiveDataTime = now
+	// 检测是否需要写入数据
+	if utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
+		for _, room := range list.Rooms {
+			uv, _err := utils.GetUV()
+			if _err != nil {
+				err = _err
 				return
 			}
-			// 遍历room数据
-			rooms, _ := utils.GetRoomInfoUrls()
-			var list []map[string]interface{}
-			for _, r := range rooms {
-				baseInfo, _ := api.ScreenLoadBaseInfo(r.RoomId)
-				productDetail, _ := api.ScreenLoadProductDetail(r.RoomId)
-				list = append(list, map[string]interface{}{
-					"base_info": baseInfo,
-					"product_detail": productDetail,
-				})
-
+			c, _err := getLiveCsv(room, strconv.FormatInt(utils.MyConfig.Interval.SaveS, 10))
+			if _err != nil {
+				err = _err
+				return
 			}
-			f, _ := utils.GetUV()
-			updatedAt, _ := utils.GetUpdatedAt()
-			c.JSON(http.StatusOK, gin.H{
-				"code": 200,
-				"msg": "success",
-				"list": list,
-				"updated_at": utils.TimeFormat("Y-m-d H:i:s", updatedAt),
-				"uv": f,
+			// 拿数据
+			b, _err := api.ScreenLoadBaseInfo(room.RoomId)
+			if _err != nil {
+				err = _err
+				return
+			}
+			bo, _err := api.ScreenLoadRoomBoardV2(room.RoomId)
+			if _err != nil {
+				err = _err
+				return
+			}
+			exposure := 0
+			click := 0
+			for _, boo := range bo.ProductData {
+				if boo.IndexDisplay == "商品曝光人数" {
+					exposure = boo.Value.Value
+				} else if boo.IndexDisplay == "商品点击人数" {
+					click = boo.Value.Value
+				}
+			}
+			// 写
+			err = c.Write([]string{
+				utils.TimeFormat("Y-m-d H:i:s", now),
+				strconv.Itoa(b.PayCnt.Value),
+				strconv.Itoa(b.PayUcnt.Value),
+				strconv.Itoa(b.IncrFansCnt.Value),
+				strconv.Itoa(b.OnlineUserUcnt.Value),
+				utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
+				strconv.Itoa(exposure),
+				strconv.Itoa(click),
+				"",
+				"",
+				utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
+				utils.KeepFloat64ToString(uv, 2),
+				utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
+				utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+				utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+				utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+				utils.KeepFloat64ToString((float64(click)/float64(exposure))*100, 2) + "%",
+				utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
+				utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
+				strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
 			})
-		})
-		err := r.Run(":" + viper.GetString("Server.Port")) // listen and serve on 0.0.0.0:8080
-		if err != nil {
-			panic(err)
-		}
-
-	}()
-
-
-	// 打开浏览器
-	ctx, _ := chromedp.NewExecAllocator(
-		context.Background(),
-		// 以默认配置的数组为基础，覆写headless参数
-		// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
-		append(
-			chromedp.DefaultExecAllocatorOptions[:],
-			chromedp.Flag("headless", true),
-			chromedp.Flag("blink-settings", "imagesEnabled=false"),
-			chromedp.UserAgent(viper.GetString("System.UserAgent")),
-		)...,
-	)
-	ctx, cancel := chromedp.NewContext(
-		ctx,
-		// 设置日志方法
-		chromedp.WithLogf(log.Printf),
-	)
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch ev := ev.(type) {
-		case *network.EventRequestWillBeSent:
-			req := ev.Request
-			if strings.Index(req.URL, "live_quickview") != -1 {
-				liveAnalysisUrl = req.URL
+			if err != nil {
+				return
 			}
-			break
 		}
-		// other needed network Event
-	})
-	if err := chromedp.Run(ctx, cookies()); err != nil {
-		// 重启
-		fmt.Println(err)
+		utils.MyApp.LastSaveLiveDataTime = now
 	}
-	if !isLogin {
-		if err := chromedp.Run(ctx, login()); err != nil {
-			// 重启
-			fmt.Println(err)
+	if utils.MyConfig.Interval.SaveSEX != 0 {
+		if utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
+			for _, room := range list.Rooms {
+				uv, _err := utils.GetUV()
+				if _err != nil {
+					err = _err
+					return
+				}
+				c, _err := getLiveCsv(room, strconv.FormatInt(utils.MyConfig.Interval.SaveSEX, 10))
+				if _err != nil {
+					err = _err
+					return
+				}
+				// 拿数据
+				b, _err := api.ScreenLoadBaseInfo(room.RoomId)
+				if _err != nil {
+					err = _err
+					return
+				}
+				bo, _err := api.ScreenLoadRoomBoardV2(room.RoomId)
+				if _err != nil {
+					err = _err
+					return
+				}
+				exposure := 0
+				click := 0
+				for _, boo := range bo.ProductData {
+					if boo.IndexDisplay == "商品曝光人数" {
+						exposure = boo.Value.Value
+					} else if boo.IndexDisplay == "商品点击人数" {
+						click = boo.Value.Value
+					}
+				}
+				// 写
+				err = c.Write([]string{
+					utils.TimeFormat("Y-m-d H:i:s", now),
+					strconv.Itoa(b.PayCnt.Value),
+					strconv.Itoa(b.PayUcnt.Value),
+					strconv.Itoa(b.IncrFansCnt.Value),
+					strconv.Itoa(b.OnlineUserUcnt.Value),
+					utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
+					strconv.Itoa(exposure),
+					strconv.Itoa(click),
+					"",
+					"",
+					utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
+					utils.KeepFloat64ToString(uv, 2),
+					utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
+					utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+					utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+					utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+					utils.KeepFloat64ToString((float64(click)/float64(exposure))*100, 2) + "%",
+					utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
+					utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
+					strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
+				})
+				if err != nil {
+					return
+				}
+			}
+			utils.MyApp.LastSaveEXLiveDataTime = now
 		}
 	}
-	// 开始爬数据
-	if err := chromedp.Run(ctx, getData()); err != nil {
-		// 重启
-		fmt.Println(err)
+	return
+}
+
+func getLiveDataUrls() (err error) {
+	// 检测时间是否满足
+	now := time.Now()
+	if !utils.MyApp.LastLiveListUrlsTime.IsZero() && now.Sub(utils.MyApp.LastLiveListUrlsTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
+		return
 	}
-	cancel()
-	// 获取所有直播间
-	resp := api.ListQuickview(liveAnalysisUrl)
-	if resp.St != 0 {
-		fmt.Println(resp.Msg)
-	}else{
-		baseUrl := `https://compass.jinritemai.com/screen/list/shop/main`
-		list := resp.Data.DataResult
-		b, _ := json.Marshal(list)
-		fmt.Println(string(b))
-		for k, l := range list {
-			if k >= 3 {
-				break
-			}
-			url := baseUrl + fmt.Sprintf("?live_room_id=%s&live_app_id=%d&source=shop_real_time", l.LiveRoomID, l.LiveAppID)
-			// 打开浏览器
-			ctx, _ := chromedp.NewExecAllocator(
-				context.Background(),
-				// 以默认配置的数组为基础，覆写headless参数
-				// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
-				append(
-					chromedp.DefaultExecAllocatorOptions[:],
-					chromedp.Flag("headless", true),
-					chromedp.Flag("blink-settings", "imagesEnabled=false"),
-					chromedp.UserAgent(viper.GetString("System.UserAgent")),
-				)...,
-			)
-			ctx, _ = chromedp.NewContext(
-				ctx,
-				// 设置日志方法
-				chromedp.WithLogf(log.Printf),
-			)
-			// 加载cookies
-			if err := chromedp.Run(ctx, goToPagePre()); err != nil {
-				// 重启
-				fmt.Println(err)
-			}
+	info, err := utils.GetRoomUrlInfo()
+	if err != nil {
+		return
+	}
+	if len(info.Rooms) > 0 {
+		for _, room := range info.Rooms {
+			// 拼接浏览器地址
+			winUrl := `https://compass.jinritemai.com/screen/list/shop/main` + fmt.Sprintf("?live_room_id=%s&live_app_id=%d&source=shop_real_time",
+				room.RoomId, room.AppId)
+			baseUrl := ""
+			proUrl := ""
+			detailUrl := ""
+			ctx, cancel, _ := genChromeCtx()
 			// 添加监听
 			chromedp.ListenTarget(ctx, func(ev interface{}) {
 				switch ev := ev.(type) {
 				case *network.EventRequestWillBeSent:
 					req := ev.Request
 					if strings.Index(req.URL, "screen/base_info") != -1 {
+						baseUrl = req.URL
 						// 解析url并存储数据
-						u, _ := urlPkg.Parse(req.URL)
-						m, _ := urlPkg.ParseQuery(u.RawQuery)
-						err := utils.SaveRoomInfoUrl(utils.RoomUrlInfo{RoomId: m["live_room_id"][0], BaseInfoUrl: req.URL})
+						err := utils.SaveRoomsDataUrlInfo(utils.RoomsDataUrlInfo{
+							RoomId:           room.RoomId,
+							BaseInfoUrl:      req.URL,
+							ProductDetailUrl: "",
+							LiveDetailUrl:    "",
+						})
 						if err != nil {
 							fmt.Println(err)
 						}
 					} else if strings.Index(req.URL, "screen/product_detail") != -1 {
+						proUrl = req.URL
 						// 解析url并存储数据
-						u, _ := urlPkg.Parse(req.URL)
-						m, _ := urlPkg.ParseQuery(u.RawQuery)
-						err := utils.SaveRoomInfoUrl(utils.RoomUrlInfo{RoomId: m["live_room_id"][0], ProductDetailUrl: req.URL})
+						err := utils.SaveRoomsDataUrlInfo(utils.RoomsDataUrlInfo{
+							RoomId:           room.RoomId,
+							BaseInfoUrl:      "",
+							ProductDetailUrl: req.URL,
+							LiveDetailUrl:    "",
+						})
+						if err != nil {
+							fmt.Println(err)
+						}
+					} else if strings.Index(req.URL, "business_api/shop/live_room/room_board_v2") != -1 {
+						detailUrl = req.URL
+						// 解析url并存储数据
+						err := utils.SaveRoomsDataUrlInfo(utils.RoomsDataUrlInfo{
+							RoomId:           room.RoomId,
+							BaseInfoUrl:      "",
+							ProductDetailUrl: "",
+							LiveDetailUrl:    req.URL,
+						})
 						if err != nil {
 							fmt.Println(err)
 						}
@@ -268,124 +392,141 @@ func main() {
 				}
 				// other needed network Event
 			})
-			// 定时更新url
-			go func() {
-				for {
-					if err := chromedp.Run(ctx, goToPage(url)); err != nil {
-						// 重启
-						fmt.Println(err)
-					}
-					time.Sleep(time.Duration(viper.GetInt64("Interval.UrlS")) * time.Second)
-				}
-			}()
+			err = chromedp.Run(ctx, &chromedp.Tasks{
+				chromedp.Navigate(winUrl),
+				waitUrl(&baseUrl, 10), // 等待url获取
+				waitUrl(&proUrl, 10),  // 等待url获取
+			})
+			if err != nil {
+				cancel()
+				return
+			}
+			err = chromedp.Run(ctx, &chromedp.Tasks{
+				chromedp.Navigate(`https://compass.jinritemai.com/shop/live-detail` + fmt.Sprintf("?live_room_id=%s", room.RoomId)),
+				waitUrl(&detailUrl, 10), // 等待url获取
+			})
+			cancel()
+			if err != nil {
+				return
+			}
 		}
-		// 定时获取数据
-		for {
-		AGAIN:
-			rooms, _ := utils.GetRoomInfoUrls()
-			if len(rooms) <= 0 {
-				continue
-			}
-			for _, r := range rooms {
-				if r.BaseInfoUrl == "" || r.ProductDetailUrl == "" {
-					goto AGAIN
-				}
-				// 保存数据
-				bResp := api.ScreenBaseInfo(r.BaseInfoUrl)
-				if bResp.St	== 0 {
-					err := api.ScreenSaveBaseInfo(r.RoomId, bResp.Data)
-					if err != nil {
-						fmt.Println(err)
-					}
-				}
-				pResp := api.ScreenProductDetail(r.ProductDetailUrl)
-				if pResp.St	== 0 {
-					err := api.ScreenSaveProductDetail(r.RoomId, pResp.Data)
-					if err != nil {
-						fmt.Println(err)
-					}
-				}
-				// 保存更新时间
-				err := utils.SaveUpdatedAt(time.Now())
-				if err != nil {
-					fmt.Println(err)
-				}
-			}
-			time.Sleep(time.Duration(viper.GetInt64("Interval.GrabS")) * time.Second)
+		utils.MyApp.LastLiveListUrlsTime = now
+	}
+	return
+}
+
+func getLiveList() (err error) {
+	// 检测时间是否满足
+	now := time.Now()
+	info, err := utils.GetRoomUrlInfo()
+	if err != nil {
+		return
+	}
+	if len(info.Rooms) > 0 {
+		if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
+			return
+		}
+	} else {
+		if !utils.MyApp.LastLiveListTime.IsZero() && now.Sub(utils.MyApp.LastLiveListTime).Seconds() < 5 {
+			return
 		}
 	}
-}
-func goToPagePre() chromedp.Tasks {
-	return chromedp.Tasks{
-		loadCookies(),
+	if info.LiveUrl != "" {
+		// 更新数据
+		lResp := api.ListQuickview(info.LiveUrl)
+		if lResp.St != 0 {
+			err = errors.New(lResp.Msg)
+			return
+		}
+		for _, l := range lResp.Data.DataResult {
+			err = utils.SaveRoomsDataUrlInfo(utils.RoomsDataUrlInfo{
+				RoomId:    l.LiveRoomID,
+				AppId:     l.LiveAppID,
+				StartTime: utils.CreateTimeFormat("Y/m/d H:i:s", l.LiveRoomStartTime),
+				Nickname:  l.AnchorNickname,
+			})
+			if err != nil {
+				return
+			}
+		}
+		utils.MyApp.LastLiveListTime = now
 	}
-}
-func goToPage(url string) chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.Navigate(url),
-	}
+	return
 }
 
-
-func cookies() chromedp.Tasks {
-	return chromedp.Tasks{
-		loadCookies(),
-		chromedp.Navigate("https://compass.jinritemai.com"),
-		chromedp.Sleep(5 * time.Second),
-		checkLogin(),
+func getLiveUrl() (err error) {
+	// 检测时间是否满足
+	now := time.Now()
+	if !utils.MyApp.LastLiveUrlTime.IsZero() && now.Sub(utils.MyApp.LastLiveUrlTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
+		return
 	}
-}
-func login() chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.Click("#my-node > main > div > div.loginWrapper--2RTfW > div.rolePannel--25WFD > div.pannelRest--21kS3 > div > div.roleCard---v7UW.seller--1k9ot > svg > rect:nth-child(1)"),
-		chromedp.Click("#my-node > main > div > div.loginWrapper--2RTfW > div > div:nth-child(2) > div > div > div > div.index_oauthLogin__1vWnv > div.index_oauthLoginBody__378Xb > div:nth-child(1)"),
-		getCode(),
-		waitLogin(),
-	}
-}
-
-func getData() chromedp.Tasks {
-	return chromedp.Tasks{
+	url := ""
+	// 打开浏览器
+	ctx, cancel, _ := genChromeCtx()
+	defer func() {
+		_ = chromedp.Cancel(ctx)
+		cancel()
+	}()
+	// 添加监听
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch ev := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			if strings.Index(ev.Request.URL, "/business_api/shop/core_data/live_quickview") != -1 {
+				url = ev.Request.URL
+				err = utils.SaveRoomLiveUrl(ev.Request.URL)
+				if err == nil {
+					utils.MyApp.LastLiveUrlTime = time.Now()
+				}
+			}
+			break
+		}
+		// other needed network Event
+	})
+	err = chromedp.Run(ctx, &chromedp.Tasks{
 		chromedp.Navigate("https://compass.jinritemai.com/shop/real-time"),
-		chromedp.Sleep(5 * time.Second),
-		//chromedp.Click("#root > div > div.compassWrapper--3aIha > div.containerWrapper--kR6gq > div > div.ecom-spin-nested-loading > div > div > div.cardContainer--MZhpq > div > div.info--1VBeX > div.link--915CX.active--38eYL > div:nth-child(2)"),
-		run(),
-	}
+		waitUrl(&url, 5),
+	})
+	return
 }
-func run() chromedp.ActionFunc {
+
+func waitUrl(url *string, waitS int) chromedp.ActionFunc {
 	return func(ctx context.Context) (err error) {
+		now := time.Now()
+		for {
+			end := time.Now()
+			if end.Sub(now).Seconds() > float64(waitS) || *url != "" {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 		return
 	}
 }
 
+// 获取二维码
+func getQrcode() (err error) {
+	ctx, cancel, _ := genChromeCtx()
+	defer func() {
+		_ = chromedp.Cancel(ctx)
+		cancel()
+	}()
+	click1 := `#my-node > main > div > div.loginWrapper--2RTfW > div.rolePannel--25WFD > div.pannelRest--21kS3 > div > div.roleCard---v7UW.seller--1k9ot > svg > rect:nth-child(1)`
+	click2 := `#my-node > main > div > div.loginWrapper--2RTfW > div > div:nth-child(2) > div > div > div > div.index_oauthLogin__1vWnv > div.index_oauthLoginBody__378Xb > div:nth-child(1)`
+	err = chromedp.Run(ctx, &chromedp.Tasks{
+		chromedp.Navigate("https://compass.jinritemai.com/login"),
+		chromedp.WaitVisible(click1),
+		chromedp.Click(click1),
+		chromedp.WaitVisible(click2),
+		chromedp.Click(click2),
+		waitLogin(), // 等待登录
+	})
+	return
+}
 func waitLogin() chromedp.ActionFunc {
 	return func(ctx context.Context) (err error) {
-		if err = chromedp.WaitVisible(`#root > div > div.headerWrapper--7HYa6 > div > div.headerTools--TX8PU > div > div`).Do(ctx); err != nil {
-			return
-		}
-		// 保存cookies
-		if err = utils.SaveCookies(ctx); err != nil {
-			return
-		}
-		return
-	}
-}
-
-/**
- * 注册新tab标签的监听服务
- */
-func addNewTabListener(ctx context.Context) <-chan target.ID {
-	mux := http.NewServeMux()
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-
-	return chromedp.WaitNewTarget(ctx, func(info *target.Info) bool {
-		return info.URL != ""
-	})
-}
-
-func getCode() chromedp.ActionFunc {
-	return func(ctx context.Context) (err error) {
+		defer func() {
+			utils.MyApp.QrcodeLatest = false
+		}()
 		// 1. 用于存储图片的字节切片
 		html := ""
 		// 2. 截图
@@ -395,17 +536,17 @@ func getCode() chromedp.ActionFunc {
 			return
 		}
 		dom, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-		if err != nil{
+		if err != nil {
 			return
 		}
 		str, ok := dom.Find("img").Attr("src")
-		if  !ok {
+		if !ok {
 			err = errors.New("二维码获取失败")
 			return
 		}
 		str = strings.Replace(str, `data:image/png;base64,`, ``, 1)
 		qB, _ := base64.StdEncoding.DecodeString(str)
-		file, err := os.OpenFile(utils.FolderPath + "/tmp/qrcode.png", os.O_CREATE | os.O_RDWR, 0775)
+		file, err := os.OpenFile(utils.QrcodePath, os.O_CREATE|os.O_RDWR, 0775)
 		if err != nil {
 			return err
 		}
@@ -413,44 +554,115 @@ func getCode() chromedp.ActionFunc {
 		if err != nil {
 			return
 		}
-		qrcodeLatest = true
-		return
-	}
-}
-
-// 加载Cookies
-func loadCookies() chromedp.ActionFunc {
-	return func(ctx context.Context) (err error) {
-		// 设置cookies
-		if len(utils.LoadCookies()) > 0 {
-			return network.SetCookies(utils.LoadCookies()).Do(ctx)
+		utils.MyApp.QrcodeLatest = true
+		// 检测二维码是否过期
+		b := false
+		now := time.Now()
+		for {
+			end := time.Now()
+			if err := chromedp.OuterHTML("html", &html).Do(ctx); err == nil {
+				if dom, err := goquery.NewDocumentFromReader(strings.NewReader(html)); err == nil {
+					if dom.Find("#root > div > div.headerWrapper--7HYa6 > div > div.headerTools--TX8PU > div > div").Length() > 0 {
+						// 成功登录
+						b = true
+						break
+					}
+				}
+			}
+			if end.Sub(now).Seconds() >= float64(utils.MyConfig.Interval.QrcodeExpireS) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		// 保存cookies
+		if b {
+			if err = utils.SaveCookies(ctx); err != nil {
+				return
+			}
 		}
 		return
 	}
 }
 
-// 检测是否需要登录
-func checkLogin() chromedp.ActionFunc {
-	return func(ctx context.Context) (err error) {
-		// 检测是否需要登录
-		html := ""
-		err = chromedp.InnerHTML(`html`, &html).Do(ctx)
-		if err != nil {
-			fmt.Println("err", err)
-			return
-		}
-		dom, err := goquery.NewDocumentFromReader(strings.NewReader(html))
-		if err != nil {
-			return
-		}
-		sel := dom.Find(`#root > div > div.headerWrapper--7HYa6 > div > div.headerTools--TX8PU > div > div`)
-		if sel.Length() <= 0 {
-			// 需要登录
-			isLogin = false
-			return
-		}
-		isLogin = true
-		return
+// 检测登录
+func checkLogin() error {
+	// 判断是否存在cookie
+	if !utils.HasCookies() {
+		utils.MyApp.IsLogin = false
+		return nil
 	}
+	url := ""
+	ctx, cancel, _ := genChromeCtx()
+	defer func() {
+		_ = chromedp.Cancel(ctx)
+		cancel()
+	}()
+	// 添加监听
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch ev := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			if strings.Index(ev.Request.URL, "/business_api/shop/core_data/live") != -1 {
+				url = ev.Request.URL
+			}
+			break
+		}
+		// other needed network Event
+	})
+
+	err := chromedp.Run(ctx, &chromedp.Tasks{
+		chromedp.Navigate("https://compass.jinritemai.com"),
+		waitUrl(&url, 10), // 等待10s
+	})
+	if err != nil {
+		return err
+	}
+	// 更新状态
+	if url != "" {
+		utils.MyApp.IsLogin = true
+	} else {
+		utils.MyApp.IsLogin = false
+	}
+	fmt.Println("%v", utils.MyApp)
+	return nil
 }
 
+func genChromeCtx() (context.Context, context.CancelFunc, error) {
+	// 打开浏览器
+	ctx, cancel := chromedp.NewExecAllocator(
+		context.Background(),
+		// 以默认配置的数组为基础，覆写headless参数
+		// 当然也可以根据自己的需要进行修改，这个flag是浏览器的设置
+		append(
+			chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.Flag("headless", true),
+			chromedp.Flag("blink-settings", "imagesEnabled=false"),
+			chromedp.UserAgent(utils.MyConfig.System.UserAgent),
+		)...,
+	)
+	ctx, _ = chromedp.NewContext(
+		ctx,
+		// 设置日志方法
+		chromedp.WithLogf(log.Printf),
+	)
+	// 加载cookie
+	err := chromedp.Run(ctx, &chromedp.Tasks{
+		utils.ChromedpLoadCookies(),
+	})
+	return ctx, cancel, err
+}
+
+// 获取直播专用csv对象
+func getLiveCsv(room utils.RoomsDataUrlInfo, h string) (*utils.Csv, error) {
+	now := time.Now()
+	path := utils.FolderPath+"/数据/"+room.Nickname+"_"+utils.TimeFormat("Ymd", room.StartTime)
+	if h != "" {
+		path = path + "_" + h
+	}
+	return utils.NewCsv(path,
+		"数据", now, []string{
+			"抓取时间",
+			"成交件数", "成交人数", "新增粉丝数", "累计观看人数", "GMV", "商品曝光人数", "商品点击人数", "引流品金额（低于10块）", "非引流品金额",
+			"实时刷单金额", "预期UV价值", "实时uv价值", "订单转化率", "成交人数转化率", "转粉率", "购物车点击率", "客单价", "成交粉丝占比",
+			"人均看播时长",
+		})
+}

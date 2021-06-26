@@ -15,15 +15,15 @@ import (
 var FolderPath = ""
 var QrcodePath = ""
 var CookiesPath = ""
-var RoomUrlInfoPath = ""
+var PlayInfoPath = ""
 var RoomsDataPath = ""
 var UVPath = ""
 var TemplatesPath = ""
 
-var mRoomUrlInfo *sync.RWMutex
+var mPlay *sync.RWMutex
 
 func init() {
-	mRoomUrlInfo = new(sync.RWMutex)
+	mPlay = new(sync.RWMutex)
 	var err error
 	FolderPath, err = osext.ExecutableFolder()
 	if err != nil {
@@ -32,10 +32,11 @@ func init() {
 	//FolderPath = "."
 	QrcodePath = FolderPath + "/tmp/qrcode.png"
 	CookiesPath = FolderPath + "/cookies.tmp"
-	RoomUrlInfoPath = FolderPath + "/tmp/room_url_info.tmp"
-	RoomsDataPath = FolderPath + "/tmp/rooms/%s"
 	UVPath = FolderPath + "/uv.tmp"
 	TemplatesPath = FolderPath + "/templates"
+	PlayInfoPath = FolderPath + "/tmp/play_info.tmp"
+	RoomsDataPath = FolderPath + "/tmp/rooms/%s"
+	//RoomUrlInfoPath = FolderPath + "/tmp/room_url_info.tmp"
 }
 
 // KeepFloat64 保留几位小数
@@ -102,82 +103,70 @@ func GetUV() (f float64, err error) {
 	return
 }
 
-type RoomUrlInfo struct {
-	LiveUrl string `json:"live_url"`
-	Rooms []RoomsDataUrlInfo `json:"rooms_data_url_info"`
-}
-
-type RoomsDataUrlInfo struct {
-	Nickname string `json:"nickname"` // 昵称
+type PlayInfoData struct {
+	Url string `json:"url"`
+	NickName string `json:"nick_name"`
+	UserAvatar string `json:"user_avatar"`
+	StreamURL string `json:"stream_url"`
+	UserApp int `json:"user_app"`
+	RoomID string `json:"room_id"` // 可以用这个判断是否开播
+	QrcodeSchemaURL string `json:"qrcode_schema_url"`
+	HasReleasedFissionActivity bool `json:"has_released_fission_activity"`
 	StartTime time.Time `json:"start_time"` // 开播时间
-	RoomId string `json:"room_id"`
-	AppId int `json:"app_id"`
 	BaseInfoUrl string `json:"base_info_url"`
 	ProductDetailUrl string `json:"product_detail_url"`
 	LiveDetailUrl string `json:"live_detail_url"`
 }
-func SaveRoomLiveUrl(url string) (err error) {
-	mRoomUrlInfo.Lock()
-	defer mRoomUrlInfo.Unlock()
+func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err error) {
+	mPlay.Lock()
+	defer mPlay.Unlock()
 	// 先取出来
-	info, err := GetRoomUrlInfo()
+	info, err = GetPlayInfoData()
 	if err != nil {
 		return
 	}
-	// 再存
-	info.LiveUrl = url
-	b, _ := json.Marshal(info)
-	if err = ioutil.WriteFile(RoomUrlInfoPath, b, 0755); err != nil {
-		return
-	}
-	return
-}
-func SaveRoomsDataUrlInfo(room RoomsDataUrlInfo) (err error) {
-	mRoomUrlInfo.Lock()
-	defer mRoomUrlInfo.Unlock()
-	// 先取出来
-	info, err := GetRoomUrlInfo()
-	if err != nil {
-		return
-	}
-	// 再存
-	bo := false
-	for k, r := range info.Rooms {
-		if r.RoomId == room.RoomId {
-			if room.BaseInfoUrl != "" {
-				r.BaseInfoUrl = room.BaseInfoUrl
-			}
-			if room.ProductDetailUrl != "" {
-				r.ProductDetailUrl = room.ProductDetailUrl
-			}
-			if room.LiveDetailUrl != "" {
-				r.LiveDetailUrl = room.LiveDetailUrl
-			}
-			if room.Nickname != "" {
-				r.Nickname = room.Nickname
-			}
-			if !room.StartTime.IsZero() {
-				r.StartTime = room.StartTime
-			}
-			info.Rooms[k] = r
-			bo = true
-			break
+	switch t {
+	case "URL":
+		info.Url = newInfo.Url
+		break
+	case "PLAY_INFO":
+		info.NickName = newInfo.NickName
+		info.UserAvatar = newInfo.UserAvatar
+		info.UserApp = newInfo.UserApp
+		if newInfo.HasReleasedFissionActivity {
+			info.RoomID = newInfo.RoomID
+			info.QrcodeSchemaURL = newInfo.QrcodeSchemaURL
+			info.StreamURL = newInfo.StreamURL
 		}
-	}
-	if !bo {
-		info.Rooms = append(info.Rooms, room)
+		break
+	case "ROOM_DATA_URL":
+		if newInfo.BaseInfoUrl != "" {
+			info.BaseInfoUrl = newInfo.BaseInfoUrl
+		}
+		if newInfo.ProductDetailUrl != "" {
+			info.ProductDetailUrl = newInfo.ProductDetailUrl
+		}
+		if newInfo.LiveDetailUrl != "" {
+			info.LiveDetailUrl = newInfo.LiveDetailUrl
+		}
+		break
+	case "CHARGE_PLAY_INFO":
+		// 从未直播变为已直播
+		info = newInfo
+		info.StartTime = time.Now()
+		break
 	}
 	b, _ := json.Marshal(info)
-	if err = ioutil.WriteFile(RoomUrlInfoPath, b, 0755); err != nil {
+	if err = ioutil.WriteFile(PlayInfoPath, b, 0755); err != nil {
 		return
 	}
 	return
 }
-func GetRoomUrlInfo() (info RoomUrlInfo, err error) {
-	if _, _err := os.Stat(RoomUrlInfoPath); os.IsNotExist(_err) {
+func GetPlayInfoData() (info PlayInfoData, err error) {
+	if _, _err := os.Stat(PlayInfoPath); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(RoomUrlInfoPath)
+	b, err := ioutil.ReadFile(PlayInfoPath)
 	if err != nil {
 		return
 	}

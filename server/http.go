@@ -7,7 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"strconv"
-	"time"
 )
 
 func Run() {
@@ -77,35 +76,6 @@ func Run() {
 		c.JSON(http.StatusOK, gin.H{})
 	})
 	// 获取数据
-	r.GET("/api/get/data", func(c *gin.Context) {
-		if !utils.MyApp.IsLogin {
-			c.JSON(http.StatusOK, gin.H{
-				"code": 4003,
-				"msg": "请登录",
-			})
-			return
-		}
-		// 遍历room数据
-		info, _ := utils.GetRoomUrlInfo()
-		var list []map[string]interface{}
-		for _, r := range info.Rooms {
-			baseInfo, _ := api.ScreenLoadBaseInfo(r.RoomId)
-			productDetail, _ := api.ScreenLoadProductDetail(r.RoomId)
-			list = append(list, map[string]interface{}{
-				"base_info": baseInfo,
-				"product_detail": productDetail,
-			})
-
-		}
-		f, _ := utils.GetUV()
-		c.JSON(http.StatusOK, gin.H{
-			"code": 200,
-			"msg": "success",
-			"list": list,
-			"updated_at": utils.TimeFormat("Y-m-d H:i:s", utils.MyApp.LastLiveDataTime),
-			"uv": f,
-		})
-	})
 	r.GET("/api/get/last/data", func(c *gin.Context) {
 		if !utils.MyApp.IsLogin {
 			c.JSON(http.StatusOK, gin.H{
@@ -115,10 +85,10 @@ func Run() {
 			return
 		}
 		// 遍历room数据
-		info, _ := utils.GetRoomUrlInfo()
+		info := utils.MyApp.PlayInfo
 		// 先取出最后一场直播
 		uv, _ := utils.GetUV()
-		if len(info.Rooms) <= 0 {
+		if info.RoomID == "" {
 			c.JSON(http.StatusOK, gin.H{
 				"code": 200,
 				"msg": "success",
@@ -126,28 +96,8 @@ func Run() {
 			})
 			return
 		}else{
-			tmpTime := time.Time{}
-			index := 0
-			for k, r := range info.Rooms {
-				if r.RoomId != "" {
-					if r.StartTime.After(tmpTime) {
-						tmpTime = r.StartTime
-						index = k
-					}
-				}
-			}
-			room := info.Rooms[index]
-			b, _ := api.ScreenLoadBaseInfo(room.RoomId)
-			board, _ := api.ScreenLoadRoomBoardV2(room.RoomId)
-			exposure := 0
-			click := 0
-			for _, boo := range board.ProductData {
-				if boo.IndexDisplay == "商品曝光人数" {
-					exposure = boo.Value.Value
-				} else if boo.IndexDisplay == "商品点击人数" {
-					click = boo.Value.Value
-				}
-			}
+			b, _ := api.ScreenLoadBaseInfo(info.RoomID)
+			o, _ := api.ScreenLoadRoomOverview(info.RoomID)
 			if b.Title == "" {
 				c.JSON(http.StatusOK, gin.H{
 					"code": 200,
@@ -167,8 +117,8 @@ func Run() {
 						IncrFansCnt:    strconv.Itoa(b.IncrFansCnt.Value),
 						OnlineUserUcnt: strconv.Itoa(b.OnlineUserUcnt.Value),
 						Gmv:            utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
-						Exposure:       strconv.Itoa(exposure),
-						Click:          strconv.Itoa(click),
+						Exposure:       strconv.Itoa(o.ProductStats.ShowUv),
+						Click:          strconv.Itoa(o.ProductStats.ClickUv),
 						YinLiu:         "",
 						FYinLiu:        "",
 						SSSD:           utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
@@ -177,7 +127,7 @@ func Run() {
 						OZHL:           utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
 						CJRSZHL:        utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
 						ZFL:            utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-						GWCDJL:         utils.KeepFloat64ToString((float64(click)/float64(exposure))*100, 2) + "%",
+						GWCDJL:         utils.KeepFloat64ToString((float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100, 2) + "%",
 						KDJ:            utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
 						CJFSZB:         utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
 						RJKBSC:         strconv.Itoa(b.AvgWatchDuration.Value) + "秒",

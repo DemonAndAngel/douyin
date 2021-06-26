@@ -25,7 +25,7 @@ func NewCsv(filepath string, filename string, createTime time.Time, title []stri
 	if createTime.IsZero() {
 		createTime = time.Now()
 	}
-	filename = filename + "_" + TimeFormat("Y-m-d", createTime) + ".csv"
+	filename = filename + ".csv"
 	_, err = os.Stat(filepath)
 	if err != nil && os.IsNotExist(err) {
 		err = nil
