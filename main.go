@@ -131,7 +131,7 @@ func main() {
 	go func() {
 		// 定时获取数据
 		for {
-			if utils.MyApp.IsLogin {
+			if utils.MyApp.IsLogin && utils.MyApp.PlayInfo.RoomID != "" {
 				err := getData()
 				if err != nil {
 					fmt.Println("get data error:" + err.Error())
@@ -149,7 +149,7 @@ func getLivePlayInfoUrl() (err error) {
 	if !utils.MyApp.LastPlayInfoUrlTime.IsZero() && now.Sub(utils.MyApp.LastPlayInfoUrlTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
 		return
 	}
-	url := ""
+	playUrl := ""
 	// 打开浏览器
 	ctx, cancel, _ := genChromeCtx()
 	defer func() {
@@ -161,9 +161,9 @@ func getLivePlayInfoUrl() (err error) {
 		switch ev := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			if strings.Index(ev.Request.URL, "api/livepc/playinfo") != -1 {
-				url = ev.Request.URL
+				playUrl = ev.Request.URL
 				playInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					Url:                        url,
+					Url:                        playUrl,
 				}, "URL")
 				if err == nil {
 					utils.MyApp.PlayInfo = playInfo
@@ -175,9 +175,8 @@ func getLivePlayInfoUrl() (err error) {
 		// other needed network Event
 	})
 	err = chromedp.Run(ctx, &chromedp.Tasks{
-		chromedp.Navigate("https://buyin.jinritemai.com/mpa/account/login?log_out=1&type=24"),
 		chromedp.Navigate("https://buyin.jinritemai.com/dashboard/live/control"),
-		waitUrl(&url, 5),
+		waitUrl(&playUrl, 5),
 	})
 	return
 }
@@ -230,7 +229,13 @@ func getData() (err error) {
 		return
 	}
 	bResp := api.ScreenBaseInfo(info.BaseInfoUrl)
+	fmt.Println("bResp", bResp)
 	if bResp.St != 0 {
+		err = errors.New(bResp.Msg)
+		return
+	} else if bResp.St == 10005 {
+		// 等待抓取最新cookies
+		time.Sleep(5 * time.Second)
 		err = errors.New(bResp.Msg)
 		return
 	} else {
@@ -241,8 +246,14 @@ func getData() (err error) {
 		}
 	}
 	pResp := api.ScreenProductDetail(info.ProductDetailUrl)
+	fmt.Println("pResp", pResp)
 	if pResp.St != 0 {
 		err = errors.New(pResp.Msg)
+		return
+	} else if bResp.St == 10005 {
+		// 等待抓取最新cookies
+		time.Sleep(5 * time.Second)
+		err = errors.New(bResp.Msg)
 		return
 	} else {
 		// 存数据
@@ -252,8 +263,14 @@ func getData() (err error) {
 		}
 	}
 	dResp := api.ScreenRoomOverview(info.LiveDetailUrl)
+	fmt.Println("dResp", dResp)
 	if dResp.St != 0 {
 		err = errors.New(dResp.Msg)
+		return
+	} else if bResp.St == 10005 {
+		// 等待抓取最新cookies
+		time.Sleep(5 * time.Second)
+		err = errors.New(bResp.Msg)
 		return
 	} else {
 		// 存数据
@@ -385,6 +402,7 @@ func getLiveDataUrls() (err error) {
 	pB, _ := json.Marshal(data)
 	params := string(pB)
 	winUrl := `https://compass.jinritemai.com/business_api/home/buyin_redirect/15101` + fmt.Sprintf("?params=%s", url.QueryEscape(params))
+	//winUrl := `https://compass.jinritemai.com/screen/list/talent/main` + fmt.Sprintf("?source=%s&live_app_id=%d&live_room_id=%s", "baiying_live_data", info.UserApp, info.RoomID)
 	baseUrl := ""
 	proUrl := ""
 	detailUrl := ""
@@ -439,13 +457,13 @@ func getLiveDataUrls() (err error) {
 		chromedp.Navigate(winUrl),
 		waitUrl(&baseUrl, 10), // 等待url获取
 		waitUrl(&proUrl, 10),  // 等待url获取
+		updateCookies(), // 更新cookies
 	})
 	if err != nil {
 		cancel()
 		return
 	}
 	err = chromedp.Run(ctx, &chromedp.Tasks{
-		chromedp.Navigate("https://buyin.jinritemai.com/mpa/account/login?log_out=1&type=24"),
 		chromedp.Navigate(`https://buyin.jinritemai.com/dashboard/livedata/detail` + fmt.Sprintf("?room_id=%s", info.RoomID)),
 		waitUrl(&detailUrl, 10), // 等待url获取
 	})
@@ -457,6 +475,14 @@ func getLiveDataUrls() (err error) {
 	return
 }
 
+func updateCookies() chromedp.ActionFunc {
+	return func(ctx context.Context) (err error) {
+		if err = utils.SaveCookies(ctx); err != nil {
+			return
+		}
+		return
+	}
+}
 
 func waitUrl(url *string, waitS int) chromedp.ActionFunc {
 	return func(ctx context.Context) (err error) {
@@ -555,6 +581,12 @@ func waitLogin() chromedp.ActionFunc {
 		}
 		if b {
 			// 保存cookies
+			//if err = chromedp.Run(ctx, &chromedp.Tasks{
+			//	chromedp.Navigate("https://creator.douyin.com"),
+			//	chromedp.Sleep(3 * time.Second),
+			//}); err != nil {
+			//	return
+			//}
 			if err = utils.SaveCookies(ctx); err != nil {
 				return
 			}
@@ -571,7 +603,8 @@ func checkLogin() error {
 		return nil
 	}
 	result := api.GetUser()
-	fmt.Println("result", result)
+	b, _ := json.Marshal(result)
+	fmt.Println("result", string(b))
 	if result.St != 0 || result.Code != 0 || result.Data.UserRole == 0 {
 		utils.MyApp.IsLogin = false
 	}else{
