@@ -163,10 +163,13 @@ func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err er
 		info.NickName = newInfo.NickName
 		info.UserAvatar = newInfo.UserAvatar
 		info.UserApp = newInfo.UserApp
-		if newInfo.HasReleasedFissionActivity {
+		info.HasReleasedFissionActivity = newInfo.HasReleasedFissionActivity
+		if info.RoomID != newInfo.RoomID && newInfo.RoomID != "" {
+			// 重置roomid
 			info.RoomID = newInfo.RoomID
 			info.QrcodeSchemaURL = newInfo.QrcodeSchemaURL
 			info.StreamURL = newInfo.StreamURL
+			info.StartTime = time.Now()
 		}
 		break
 	case "ROOM_DATA_URL":
@@ -179,11 +182,6 @@ func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err er
 		if newInfo.LiveDetailUrl != "" {
 			info.LiveDetailUrl = newInfo.LiveDetailUrl
 		}
-		break
-	case "CHARGE_PLAY_INFO":
-		// 从未直播变为已直播
-		info = newInfo
-		info.StartTime = time.Now()
 		break
 	}
 	b, _ := json.Marshal(info)

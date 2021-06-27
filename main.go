@@ -132,7 +132,7 @@ func main() {
 		// 定时获取数据
 		for {
 			if utils.MyApp.IsLogin && utils.MyApp.PlayInfo.RoomID != "" {
-				err := getData()
+				err := getData(false)
 				if err != nil {
 					fmt.Println("get data error:" + err.Error())
 				}
@@ -184,12 +184,9 @@ func getLivePlayInfoUrl() (err error) {
 func getLivePlayInfo() (err error) {
 	// 检测是否正在直播是否满足
 	result := api.LivePlayInfo(utils.MyApp.PlayInfo.Url)
+	fmt.Println("play info result", result)
 	if result.St == 0 && result.Code == 0 {
 		// 更新当前直播数据
-		t := "PLAY_INFO"
-		if !utils.MyApp.PlayInfo.HasReleasedFissionActivity && result.Data.HasReleasedFissionActivity {
-			t = "CHARGE_PLAY_INFO"
-		}
 		playInfo, _err := utils.SavePlayInfoData(utils.PlayInfoData{
 			NickName:                   result.Data.NickName,
 			UserAvatar:                 result.Data.UserAvatar,
@@ -198,29 +195,37 @@ func getLivePlayInfo() (err error) {
 			RoomID:                     result.Data.RoomID,
 			QrcodeSchemaURL:            result.Data.QrcodeSchemaURL,
 			HasReleasedFissionActivity: result.Data.HasReleasedFissionActivity,
-		}, t)
+		}, "PLAY_INFO")
 		if _err != nil {
 			err = _err
 			return
 		}
-		utils.MyApp.PlayInfo = playInfo
 		// 重置地址
-		if t == "CHARGE_PLAY_INFO" {
+		if result.Data.RoomID != "" && utils.MyApp.PlayInfo.RoomID != result.Data.RoomID {
+			// 需要重置地址
+			fmt.Println("需要重置地址")
 			_err = getLiveDataUrls()
 			if _err != nil {
 				err = _err
 				return
 			}
+			// 重新获取一遍数据
+			_err = getData(true)
+			if _err != nil {
+				err = _err
+				return
+			}
 		}
+		utils.MyApp.PlayInfo = playInfo
 	}
 	return
 }
 
 
-func getData() (err error) {
+func getData(q bool) (err error) {
 	// 检测时间是否满足
 	now := time.Now()
-	if !utils.MyApp.LastLiveDataTime.IsZero() && now.Sub(utils.MyApp.LastLiveDataTime).Seconds() < float64(utils.MyConfig.Interval.GrabS) {
+	if !q && !utils.MyApp.LastLiveDataTime.IsZero() && now.Sub(utils.MyApp.LastLiveDataTime).Seconds() < float64(utils.MyConfig.Interval.GrabS) {
 		return
 	}
 	// 获取直播间
@@ -282,7 +287,7 @@ func getData() (err error) {
 	}
 	utils.MyApp.LastLiveDataTime = now
 	// 检测是否需要写入数据
-	if utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
+	if !q && utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
 		uv, _err := utils.GetUV()
 		if _err != nil {
 			err = _err
@@ -333,7 +338,7 @@ func getData() (err error) {
 		utils.MyApp.LastSaveLiveDataTime = now
 	}
 	if utils.MyConfig.Interval.SaveSEX != 0 {
-		if utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
+		if !q && utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
 			uv, _err := utils.GetUV()
 			if _err != nil {
 				err = _err
@@ -407,6 +412,10 @@ func getLiveDataUrls() (err error) {
 	proUrl := ""
 	detailUrl := ""
 	ctx, cancel, _ := genChromeCtx()
+	defer func() {
+		_ = chromedp.Cancel(ctx)
+		cancel()
+	}()
 	// 添加监听
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch ev := ev.(type) {
@@ -454,20 +463,21 @@ func getLiveDataUrls() (err error) {
 		// other needed network Event
 	})
 	err = chromedp.Run(ctx, &chromedp.Tasks{
+		chromedp.Navigate(`https://buyin.jinritemai.com/dashboard/livedata/detail` + fmt.Sprintf("?room_id=%s", info.RoomID)),
+		waitUrl(&detailUrl, 10), // 等待url获取
+	})
+	fmt.Println("detailUrl", detailUrl)
+	if err != nil {
+		return
+	}
+	err = chromedp.Run(ctx, &chromedp.Tasks{
 		chromedp.Navigate(winUrl),
 		waitUrl(&baseUrl, 10), // 等待url获取
 		waitUrl(&proUrl, 10),  // 等待url获取
 		updateCookies(), // 更新cookies
 	})
-	if err != nil {
-		cancel()
-		return
-	}
-	err = chromedp.Run(ctx, &chromedp.Tasks{
-		chromedp.Navigate(`https://buyin.jinritemai.com/dashboard/livedata/detail` + fmt.Sprintf("?room_id=%s", info.RoomID)),
-		waitUrl(&detailUrl, 10), // 等待url获取
-	})
-	cancel()
+	fmt.Println("baseUrl", baseUrl)
+	fmt.Println("proUrl", proUrl)
 	if err != nil {
 		return
 	}
