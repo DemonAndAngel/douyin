@@ -70,10 +70,24 @@ func Run() {
 	})
 	r.POST("/api/set/uv", func(c *gin.Context) {
 		// 设置预期uv值
-		str := c.PostForm("uv")
-		f, _ := strconv.ParseFloat(str, 64)
-		_ = utils.SetUV(f)
-		c.JSON(http.StatusOK, gin.H{})
+		uv := utils.UV{}
+		if c.ShouldBind(&uv) == nil {
+			_ = utils.SetUV(uv)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"uv": uv,
+		})
+	})
+	r.GET("/api/get/uv", func(c *gin.Context) {
+		// 设置预期uv值
+		uv, _ := utils.GetUV()
+		c.JSON(http.StatusOK, gin.H{
+			"code": 200,
+			"msg": "success",
+			"data": gin.H{
+				"uv": uv,
+			},
+		})
 	})
 	// 获取数据
 	r.GET("/api/get/last/data", func(c *gin.Context) {
@@ -98,6 +112,8 @@ func Run() {
 		}else{
 			b, _ := api.ScreenLoadBaseInfo(info.RoomID)
 			o, _ := api.ScreenLoadRoomOverview(info.RoomID)
+			d, _ := api.ScreenLoadRoomDataTrend(info.RoomID, "trend_popularity")
+			lv2, _ := api.ScreenLoadLiveRoomDashboardV2Resp(info.RoomID)
 			if b.Title == "" {
 				c.JSON(http.StatusOK, gin.H{
 					"code": 200,
@@ -106,6 +122,26 @@ func Run() {
 				})
 				return
 			}else{
+				zbjbgrs := 0
+				for _, l := range lv2.PopularityData {
+					if l.IndexDisplay == "直播间曝光人数" {
+						zbjbgrs = l.Value.Value
+					}
+				}
+				// 取出最後一條
+				leaveUcnt := 0
+				onlineUserCnt := 0
+				watchUcnt := 0
+				if len(d.TrendPopularity.Value) > 0 {
+					y := d.TrendPopularity.Value[len(d.TrendPopularity.Value)-1].Y
+					leaveUcnt = y.LeaveUcnt
+					onlineUserCnt = y.OnlineUserCnt
+					watchUcnt = y.WatchUcnt
+				}
+				ozhl := (float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
+				zfl := (float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
+				gwcdjl := (float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100
+				zbhmzhl := (float64(b.OnlineUserUcnt.Value)/float64(zbjbgrs))*100
 				c.JSON(http.StatusOK, gin.H{
 					"code": 200,
 					"msg": "success",
@@ -121,16 +157,28 @@ func Run() {
 						Click:          strconv.Itoa(o.ProductStats.ClickUv),
 						YinLiu:         "",
 						FYinLiu:        "",
-						SSSD:           utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
-						UV:             utils.KeepFloat64ToString(uv, 2),
+						SSSD:           utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv.UV, 2),
+						UV:             utils.KeepFloat64ToString(uv.UV, 2),
 						SUV:            utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
-						OZHL:           utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+						OZHL:           utils.KeepFloat64ToString(ozhl, 2) + "%",
 						CJRSZHL:        utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-						ZFL:            utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-						GWCDJL:         utils.KeepFloat64ToString((float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100, 2) + "%",
+						ZFL:            utils.KeepFloat64ToString(zfl, 2) + "%",
+						GWCDJL:         utils.KeepFloat64ToString(gwcdjl, 2) + "%",
 						KDJ:            utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
 						CJFSZB:         utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
 						RJKBSC:         strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
+
+						ZBJBGRS: strconv.Itoa(zbjbgrs),
+						ZBHMZHL: utils.KeepFloat64ToString(zbhmzhl, 2) + "%",
+
+						LKZBJRS: strconv.Itoa(leaveUcnt),
+						SSZXRS: strconv.Itoa(onlineUserCnt),
+						JRZBJRS: strconv.Itoa(watchUcnt),
+
+						DDZHLB: ozhl < uv.YDDZHL,
+						ZFLB: zfl < uv.YZFL,
+						GWCDJLB: gwcdjl < uv.YGWCDJL,
+						ZBHMZHLB: zbhmzhl < uv.YZBHHZHL,
 					},
 				})
 				return

@@ -113,7 +113,7 @@ func main() {
 					fmt.Println("get live play info error:" + err.Error())
 				}
 			}
-			time.Sleep(1 * time.Second)
+			time.Sleep(100 * time.Second)
 		}
 	}()
 	go func() {
@@ -230,7 +230,10 @@ func getData(q bool) (err error) {
 	}
 	// 获取直播间
 	info := utils.MyApp.PlayInfo
-	if info.BaseInfoUrl == "" || info.ProductDetailUrl == "" || info.LiveDetailUrl == "" {
+	if info.BaseInfoUrl == "" || info.ProductDetailUrl == "" ||
+		info.LiveDetailUrl == "" ||
+		info.LiveRoomDashboardV2Url == "" ||
+		info.DataTrendUrl == "" {
 		return
 	}
 	bResp := api.ScreenBaseInfo(info.BaseInfoUrl)
@@ -267,6 +270,40 @@ func getData(q bool) (err error) {
 			return
 		}
 	}
+	dTResp := api.ScreenRoomDataTrend(info.DataTrendUrl, "trend_popularity")
+	fmt.Println("dTResp", dTResp)
+	if dTResp.St != 0 {
+		err = errors.New(dTResp.Msg)
+		return
+	} else if dTResp.St == 10005 {
+		// 等待抓取最新cookies
+		time.Sleep(5 * time.Second)
+		err = errors.New(dTResp.Msg)
+		return
+	}else{
+		// 存数据
+		err = api.ScreenSaveRoomDataTrend(info.RoomID, dTResp.Data, "trend_popularity")
+		if err != nil {
+			return
+		}
+	}
+	lResp := api.ScreenLiveRoomDashboardV2(info.LiveRoomDashboardV2Url)
+	fmt.Println("lResp", lResp)
+	if lResp.St != 0 {
+		err = errors.New(lResp.Msg)
+		return
+	} else if lResp.St == 10005 {
+		// 等待抓取最新cookies
+		time.Sleep(5 * time.Second)
+		err = errors.New(lResp.Msg)
+		return
+	}else{
+		// 存数据
+		err = api.ScreenSaveLiveRoomDashboardV2(info.RoomID, lResp.Data)
+		if err != nil {
+			return
+		}
+	}
 	dResp := api.ScreenRoomOverview(info.LiveDetailUrl)
 	fmt.Println("dResp", dResp)
 	if dResp.St != 0 {
@@ -281,57 +318,13 @@ func getData(q bool) (err error) {
 		// 存数据
 		err = api.ScreenSaveRoomOverview(info.RoomID, dResp.Data)
 		if err != nil {
-			err = errors.New(dResp.Msg)
 			return
 		}
 	}
 	utils.MyApp.LastLiveDataTime = now
 	// 检测是否需要写入数据
 	if !q && utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
-		uv, _err := utils.GetUV()
-		if _err != nil {
-			err = _err
-			return
-		}
-		c, _err := getLiveCsv(info, strconv.FormatInt(utils.MyConfig.Interval.SaveS, 10))
-		if _err != nil {
-			err = _err
-			return
-		}
-		// 拿数据
-		b, _err := api.ScreenLoadBaseInfo(info.RoomID)
-		if _err != nil {
-			err = _err
-			return
-		}
-		o, _err := api.ScreenLoadRoomOverview(info.RoomID)
-		if _err != nil {
-			err = _err
-			return
-		}
-		// 写
-		err = c.Write([]string{
-			utils.TimeFormat("Y-m-d H:i:s", now),
-			strconv.Itoa(b.PayCnt.Value),
-			strconv.Itoa(b.PayUcnt.Value),
-			strconv.Itoa(b.IncrFansCnt.Value),
-			strconv.Itoa(b.OnlineUserUcnt.Value),
-			utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
-			strconv.Itoa(o.ProductStats.ShowUv),
-			strconv.Itoa(o.ProductStats.ClickUv),
-			"",
-			"",
-			utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
-			utils.KeepFloat64ToString(uv, 2),
-			utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
-			utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-			utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-			utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-			utils.KeepFloat64ToString((float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100, 2) + "%",
-			utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
-			utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
-			strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
-		})
+		err = wirteCsv(now, info, utils.MyConfig.Interval.SaveS)
 		if err != nil {
 			return
 		}
@@ -339,50 +332,7 @@ func getData(q bool) (err error) {
 	}
 	if utils.MyConfig.Interval.SaveSEX != 0 {
 		if !q && utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
-			uv, _err := utils.GetUV()
-			if _err != nil {
-				err = _err
-				return
-			}
-			c, _err := getLiveCsv(info, strconv.FormatInt(utils.MyConfig.Interval.SaveSEX, 10))
-			if _err != nil {
-				err = _err
-				return
-			}
-			// 拿数据
-			b, _err := api.ScreenLoadBaseInfo(info.RoomID)
-			if _err != nil {
-				err = _err
-				return
-			}
-			o, _err := api.ScreenLoadRoomOverview(info.RoomID)
-			if _err != nil {
-				err = _err
-				return
-			}
-			// 写
-			err = c.Write([]string{
-				utils.TimeFormat("Y-m-d H:i:s", now),
-				strconv.Itoa(b.PayCnt.Value),
-				strconv.Itoa(b.PayUcnt.Value),
-				strconv.Itoa(b.IncrFansCnt.Value),
-				strconv.Itoa(b.OnlineUserUcnt.Value),
-				utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
-				strconv.Itoa(o.ProductStats.ShowUv),
-				strconv.Itoa(o.ProductStats.ClickUv),
-				"",
-				"",
-				utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv, 2),
-				utils.KeepFloat64ToString(uv, 2),
-				utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
-				utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-				utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-				utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
-				utils.KeepFloat64ToString((float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100, 2) + "%",
-				utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
-				utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
-				strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
-			})
+			err = wirteCsv(now, info, utils.MyConfig.Interval.SaveSEX)
 			if err != nil {
 				return
 			}
@@ -400,17 +350,19 @@ func getLiveDataUrls() (err error) {
 	}
 	info := utils.MyApp.PlayInfo
 	// 拼接浏览器地址
-	data := make(map[string]interface{})
-	data["live_room_id"] = info.RoomID
-	data["live_app_id"] = strconv.Itoa(info.UserApp)
-	data["source"] = "baiying_live_data"
-	pB, _ := json.Marshal(data)
-	params := string(pB)
-	winUrl := `https://compass.jinritemai.com/business_api/home/buyin_redirect/15101` + fmt.Sprintf("?params=%s", url.QueryEscape(params))
-	//winUrl := `https://compass.jinritemai.com/screen/list/talent/main` + fmt.Sprintf("?source=%s&live_app_id=%d&live_room_id=%s", "baiying_live_data", info.UserApp, info.RoomID)
+	//data := make(map[string]interface{})
+	//data["live_room_id"] = info.RoomID
+	//data["live_app_id"] = strconv.Itoa(info.UserApp)
+	//data["source"] = "baiying_live_data"
+	//pB, _ := json.Marshal(data)
+	//params := string(pB)
+	//winUrl := `https://compass.jinritemai.com/business_api/home/buyin_redirect/15101` + fmt.Sprintf("?params=%s", url.QueryEscape(params))
+	winUrl := `https://compass.jinritemai.com/screen/list/talent/main` + fmt.Sprintf("?source=%s&live_app_id=%d&live_room_id=%s", "baiying_live_data", info.UserApp, info.RoomID)
 	baseUrl := ""
 	proUrl := ""
 	detailUrl := ""
+	dataTrendUrl := ""
+	liveRoomDashboardV2Url := ""
 	ctx, cancel, _ := genChromeCtx()
 	defer func() {
 		_ = chromedp.Cancel(ctx)
@@ -428,6 +380,8 @@ func getLiveDataUrls() (err error) {
 					BaseInfoUrl:                req.URL,
 					ProductDetailUrl:           "",
 					LiveDetailUrl:              "",
+					DataTrendUrl: "",
+					LiveRoomDashboardV2Url: "",
 				}, "ROOM_DATA_URL")
 				if err != nil {
 					fmt.Println(err)
@@ -440,6 +394,8 @@ func getLiveDataUrls() (err error) {
 					BaseInfoUrl:                "",
 					ProductDetailUrl:           req.URL,
 					LiveDetailUrl:              "",
+					DataTrendUrl: "",
+					LiveRoomDashboardV2Url: "",
 				}, "ROOM_DATA_URL")
 				if err != nil {
 					fmt.Println(err)
@@ -452,6 +408,43 @@ func getLiveDataUrls() (err error) {
 					BaseInfoUrl:                "",
 					ProductDetailUrl:           "",
 					LiveDetailUrl:              req.URL,
+					DataTrendUrl: "",
+					LiveRoomDashboardV2Url: "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
+			} else if strings.Index(req.URL, "business_api/author/screen/data_trend") != -1 {
+				// 去掉 index_selected 参数
+				u, _ := url.Parse(req.URL)
+				m, _ := url.ParseQuery(u.RawQuery)
+				if _, ok := m["index_selected"]; ok {
+					delete(m, "index_selected")
+				}
+				u.RawQuery = m.Encode()
+				dataTrendUrl = u.String()
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:                "",
+					ProductDetailUrl:           "",
+					LiveDetailUrl:              "",
+					DataTrendUrl: req.URL,
+					LiveRoomDashboardV2Url: "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
+			} else if strings.Index(req.URL, "business_api/author/live_detail/live_room/dashboard_v2") != -1 {
+				liveRoomDashboardV2Url = req.URL
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:                "",
+					ProductDetailUrl:           "",
+					LiveDetailUrl:              "",
+					DataTrendUrl: "",
+					LiveRoomDashboardV2Url: req.URL,
 				}, "ROOM_DATA_URL")
 				if err != nil {
 					fmt.Println(err)
@@ -466,7 +459,6 @@ func getLiveDataUrls() (err error) {
 		chromedp.Navigate(`https://buyin.jinritemai.com/dashboard/livedata/detail` + fmt.Sprintf("?room_id=%s", info.RoomID)),
 		waitUrl(&detailUrl, 10), // 等待url获取
 	})
-	fmt.Println("detailUrl", detailUrl)
 	if err != nil {
 		return
 	}
@@ -474,10 +466,18 @@ func getLiveDataUrls() (err error) {
 		chromedp.Navigate(winUrl),
 		waitUrl(&baseUrl, 10), // 等待url获取
 		waitUrl(&proUrl, 10),  // 等待url获取
-		updateCookies(), // 更新cookies
+		waitUrl(&dataTrendUrl, 10),  // 等待url获取
+	})
+	// 拿电商罗盘-整体看板-流量数据
+	err = chromedp.Run(ctx, &chromedp.Tasks{
+		chromedp.Navigate(fmt.Sprintf("https://compass.jinritemai.com/talent/live-statement?live_room_id=%s", info.RoomID)),
+		waitUrl(&liveRoomDashboardV2Url, 10), // 等待url获取
 	})
 	fmt.Println("baseUrl", baseUrl)
 	fmt.Println("proUrl", proUrl)
+	fmt.Println("dataTrendUrl", dataTrendUrl)
+	fmt.Println("detailUrl", detailUrl)
+	fmt.Println("liveRoomDashboardV2Url", liveRoomDashboardV2Url)
 	if err != nil {
 		return
 	}
@@ -485,14 +485,14 @@ func getLiveDataUrls() (err error) {
 	return
 }
 
-func updateCookies() chromedp.ActionFunc {
-	return func(ctx context.Context) (err error) {
-		if err = utils.SaveCookies(ctx); err != nil {
-			return
-		}
-		return
-	}
-}
+//func updateCookies() chromedp.ActionFunc {
+//	return func(ctx context.Context) (err error) {
+//		if err = utils.SaveCookies(ctx); err != nil {
+//			return
+//		}
+//		return
+//	}
+//}
 
 func waitUrl(url *string, waitS int) chromedp.ActionFunc {
 	return func(ctx context.Context) (err error) {
@@ -590,17 +590,37 @@ func waitLogin() chromedp.ActionFunc {
 			time.Sleep(100 * time.Millisecond)
 		}
 		if b {
+			talentUrl := ""
+			chromedp.ListenTarget(ctx, func(ev interface{}) {
+				switch ev := ev.(type) {
+				case *network.EventRequestWillBeSent:
+					req := ev.Request
+					if strings.Index(req.URL, "talent") != -1 {
+						talentUrl = req.URL
+					}
+					break
+				}
+			})
+			if err = chromedp.Run(ctx, &chromedp.Tasks{
+				chromedp.Navigate("https://creator.douyin.com/business_api/home/buyin_redirect/10100"),
+				waitUrl(&talentUrl, 5),
+			}); err != nil {
+				return
+			}
+			if talentUrl == "" {
+				return errors.New("电商罗盘登录失败")
+			}
 			// 保存cookies
-			//if err = chromedp.Run(ctx, &chromedp.Tasks{
-			//	chromedp.Navigate("https://creator.douyin.com"),
-			//	chromedp.Sleep(3 * time.Second),
-			//}); err != nil {
-			//	return
-			//}
 			if err = utils.SaveCookies(ctx); err != nil {
 				return
 			}
 		}
+		return
+	}
+}
+func waitLoginCreator() chromedp.ActionFunc {
+	return func(ctx context.Context) (err error) {
+
 		return
 	}
 }
@@ -658,5 +678,90 @@ func getLiveCsv(info utils.PlayInfoData, h string) (*utils.Csv, error) {
 			"成交件数", "成交人数", "新增粉丝数", "累计观看人数", "GMV", "商品曝光人数", "商品点击人数", "引流品金额（低于10块）", "非引流品金额",
 			"实时刷单金额", "预期UV价值", "实时uv价值", "订单转化率", "成交人数转化率", "转粉率", "购物车点击率", "客单价", "成交粉丝占比",
 			"人均看播时长",
+			"直播间曝光人数", "直播画面转化率", "离开直播间人数", "实时在线人数", "进入直播间人数",
+			"预期订单转化率", "预期转粉率", "预期购物车点击率", "预期直播画面转化率",
 		})
+}
+func wirteCsv(now time.Time, info utils.PlayInfoData, s int64) (err error) {
+	uv, _err := utils.GetUV()
+	if _err != nil {
+		err = _err
+		return
+	}
+	c, _err := getLiveCsv(info, strconv.FormatInt(s, 10))
+	if _err != nil {
+		err = _err
+		return
+	}
+	// 拿数据
+	b, _err := api.ScreenLoadBaseInfo(info.RoomID)
+	if _err != nil {
+		err = _err
+		return
+	}
+	o, _err := api.ScreenLoadRoomOverview(info.RoomID)
+	if _err != nil {
+		err = _err
+		return
+	}
+	d, _err := api.ScreenLoadRoomDataTrend(info.RoomID, "trend_popularity")
+	if _err != nil {
+		err = _err
+		return
+	}
+	lv2, _err := api.ScreenLoadLiveRoomDashboardV2Resp(info.RoomID)
+	if _err != nil {
+		err = _err
+		return
+	}
+	zbjbgrs := 0
+	for _, l := range lv2.PopularityData {
+		if l.IndexDisplay == "直播间曝光人数" {
+			zbjbgrs = l.Value.Value
+		}
+	}
+	// 取出最後一條
+	leaveUcnt := 0
+	onlineUserCnt := 0
+	watchUcnt := 0
+	if len(d.TrendPopularity.Value) > 0 {
+		y := d.TrendPopularity.Value[len(d.TrendPopularity.Value)-1].Y
+		leaveUcnt = y.LeaveUcnt
+		onlineUserCnt = y.OnlineUserCnt
+		watchUcnt = y.WatchUcnt
+	}
+	// 写
+	err = c.Write([]string{
+		utils.TimeFormat("Y-m-d H:i:s", now),
+		strconv.Itoa(b.PayCnt.Value),
+		strconv.Itoa(b.PayUcnt.Value),
+		strconv.Itoa(b.IncrFansCnt.Value),
+		strconv.Itoa(b.OnlineUserUcnt.Value),
+		utils.KeepFloat64ToString(float64(b.Gmv)/100, 2),
+		strconv.Itoa(o.ProductStats.ShowUv),
+		strconv.Itoa(o.ProductStats.ClickUv),
+		"",
+		"",
+		utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv.UV, 2),
+		utils.KeepFloat64ToString(uv.UV, 2),
+		utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
+		utils.KeepFloat64ToString((float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+		utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+		utils.KeepFloat64ToString((float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+		utils.KeepFloat64ToString((float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100, 2) + "%",
+		utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
+		utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
+		strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
+
+		strconv.Itoa(zbjbgrs),
+		utils.KeepFloat64ToString((float64(b.OnlineUserUcnt.Value)/float64(zbjbgrs))*100, 2) + "%",
+		strconv.Itoa(leaveUcnt),
+		strconv.Itoa(onlineUserCnt),
+		strconv.Itoa(watchUcnt),
+		utils.KeepFloat64ToString(uv.YDDZHL, 2) + "%",
+		utils.KeepFloat64ToString(uv.YZFL, 2) + "%",
+		utils.KeepFloat64ToString(uv.YGWCDJL, 2) + "%",
+		utils.KeepFloat64ToString(uv.YZBHHZHL, 2) + "%",
+	})
+	return
 }

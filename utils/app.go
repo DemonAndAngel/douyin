@@ -41,4 +41,19 @@ type Data struct {
 	KDJ string `json:"kdj"`
 	CJFSZB string `json:"cjfszb"`
 	RJKBSC string `json:"rjkbsc"`
+
+	// live v2
+	ZBJBGRS string `json:"zbjbgrs"`
+	ZBHMZHL string `json:"zbhmzhl"` // LJGKRS/ZBJBGRS
+	// data_trend
+	LKZBJRS string `json:"lkzbjrs"`
+	SSZXRS string `json:"sszxrs"`
+	JRZBJRS string `json:"jrzbjrs"`
+
+
+	DDZHLB bool `json:"ddzhlb"`
+	ZFLB bool `json:"zflb"`
+	GWCDJLB bool `json:"gwcdjlb"`
+	ZBHMZHLB bool `json:"zbhmzhlb"`
+
 }

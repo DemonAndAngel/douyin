@@ -21,9 +21,11 @@ var UVPath = ""
 var TemplatesPath = ""
 
 var mPlay *sync.RWMutex
+var mUv *sync.RWMutex
 
 func init() {
 	mPlay = new(sync.RWMutex)
+	mUv = new(sync.RWMutex)
 	var err error
 	FolderPath, err = osext.ExecutableFolder()
 	if err != nil {
@@ -77,6 +79,10 @@ func KeepFloat64(val float64, num int) float64 {
 func KeepFloat64ToString(val float64, num int) string {
 	return fmt.Sprintf(fmt.Sprintf("%%.%df", num), val)
 }
+func KeepStringToFloat64(val string) float64 {
+	f, _ := strconv.ParseFloat(val, 64)
+	return f
+}
 
 // TimeFormat 时间转日期
 func TimeFormat(format string, t time.Time) string {
@@ -112,14 +118,26 @@ func CreateTimeFormat(format string, now string) time.Time {
 	}
 }
 
-func SetUV(f float64) (err error) {
+type UV struct {
+	UV float64 `json:"uv"`
+	YDDZHL float64 `json:"yddzhl"`
+	YZFL float64 `json:"yzfl"`
+	YGWCDJL float64 `json:"ygwcdjl"`
+	YZBHHZHL float64 `json:"yzbhhzhl"`
+}
+
+func SetUV(data UV) (err error) {
+	mUv.Lock()
+	defer mUv.Unlock()
+	// 2. 序列化
+	b, err := json.Marshal(data)
 	// 3. 存储到临时文件
-	if err = ioutil.WriteFile(UVPath, []byte(strconv.FormatFloat(f, 'E', -1, 64)), 0755); err != nil {
+	if err = ioutil.WriteFile(UVPath, b, 0755); err != nil {
 		return
 	}
 	return
 }
-func GetUV() (f float64, err error) {
+func GetUV() (data UV, err error) {
 	if _, _err := os.Stat(UVPath); os.IsNotExist(_err) {
 		return
 	}
@@ -128,8 +146,7 @@ func GetUV() (f float64, err error) {
 		return
 	}
 	// 反序列化
-	str := string(b)
-	f, _ = strconv.ParseFloat(str, 64)
+	_ = json.Unmarshal(b, &data)
 	return
 }
 
@@ -146,6 +163,8 @@ type PlayInfoData struct {
 	BaseInfoUrl string `json:"base_info_url"`
 	ProductDetailUrl string `json:"product_detail_url"`
 	LiveDetailUrl string `json:"live_detail_url"`
+	DataTrendUrl string `json:"data_trend_url"`
+	LiveRoomDashboardV2Url string `json:"live_room_dashboard_v_2_url"`
 }
 func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err error) {
 	mPlay.Lock()
@@ -181,6 +200,12 @@ func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err er
 		}
 		if newInfo.LiveDetailUrl != "" {
 			info.LiveDetailUrl = newInfo.LiveDetailUrl
+		}
+		if newInfo.DataTrendUrl != "" {
+			info.DataTrendUrl = newInfo.DataTrendUrl
+		}
+		if newInfo.LiveRoomDashboardV2Url != "" {
+			info.LiveRoomDashboardV2Url = newInfo.LiveRoomDashboardV2Url
 		}
 		break
 	}

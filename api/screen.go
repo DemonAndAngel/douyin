@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	urlPkg "net/url"
 	"os"
 	"sync"
 )
@@ -13,11 +14,15 @@ import (
 var baseInfoM *sync.RWMutex
 var productDetailM *sync.RWMutex
 var overviewM *sync.RWMutex
+var dataTrendM *sync.RWMutex
+var dashboardM *sync.RWMutex
 
 func init() {
 	baseInfoM = new(sync.RWMutex)
 	productDetailM = new(sync.RWMutex)
 	overviewM = new(sync.RWMutex)
+	dataTrendM = new(sync.RWMutex)
+	dashboardM = new(sync.RWMutex)
 }
 
 type ScreenBaseInfoResp struct {
@@ -198,6 +203,167 @@ func ScreenRoomOverview(url string) (result ScreenRoomOverviewResp) {
 	json.Unmarshal(body, &result)
 	return
 }
+
+type ScreenRoomDataTrendResp struct {
+	St int `json:"st"`
+	Msg string `json:"msg"`
+	Data ScreenRoomDataTrendRespData `json:"data"`
+}
+type ScreenRoomDataTrendRespData struct {
+	TrendPopularity struct {
+		Unit struct {
+			LeaveUcnt string `json:"leave_ucnt"`
+			OnlineUserCnt string `json:"online_user_cnt"`
+			WatchUcnt string `json:"watch_ucnt"`
+		} `json:"unit"`
+		Value []struct {
+			X string `json:"x"`
+			Y struct {
+				LeaveUcnt int `json:"leave_ucnt"`
+				OnlineUserCnt int `json:"online_user_cnt"`
+				WatchUcnt int `json:"watch_ucnt"`
+			} `json:"y"`
+		} `json:"value"`
+	} `json:"trend_popularity"`
+}
+func ScreenRoomDataTrend(url string, index string) (result ScreenRoomDataTrendResp) {
+	client := &http.Client{}
+	u, _ := urlPkg.Parse(url)
+	m, _ := urlPkg.ParseQuery(u.RawQuery)
+	m["index_selected"] = []string{index}
+	u.RawQuery = m.Encode()
+	req := NewRequest("GET", u.String(), nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	result.St = 500
+	json.Unmarshal(body, &result)
+	return
+}
+
+
+type LiveRoomDashboardV2Resp struct {
+	St int `json:"st"`
+	Msg string `json:"msg"`
+	Data LiveRoomDashboardV2RespData `json:"data"`
+}
+type LiveRoomDashboardV2RespData struct {
+	PopularityData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+	} `json:"popularity_data"`
+	ProductData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip,omitempty"`
+	} `json:"product_data"`
+	InteractiveData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value float64 `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip,omitempty"`
+	} `json:"interactive_data"`
+	TradeData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value float64 `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip,omitempty"`
+	} `json:"trade_data"`
+	AfterSaleData []struct {
+		IndexDisplay string `json:"index_display"`
+		Value struct {
+			Value int `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"value"`
+		ChangeValue struct {
+			Value float64 `json:"value"`
+			Unit string `json:"unit"`
+		} `json:"change_value"`
+		IndexTip string `json:"index_tip"`
+	} `json:"after_sale_data"`
+}
+func ScreenLiveRoomDashboardV2(url string) (result LiveRoomDashboardV2Resp) {
+	client := &http.Client{}
+	req := NewRequest("GET", url, nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	result.St = 500
+	json.Unmarshal(body, &result)
+	return
+}
+func ScreenSaveLiveRoomDashboardV2(roomId string, data LiveRoomDashboardV2RespData) (err error) {
+	dataTrendM.Lock()
+	defer dataTrendM.Unlock()
+	// 2. 序列化
+	b, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	// 3. 存储到临时文件
+	// 判断文件夹是否存在
+	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
+		_ = os.MkdirAll(path, os.ModePerm)
+	}
+	if err = ioutil.WriteFile(path + "/live_room_dashboard_v2.tmp", b, 0755); err != nil {
+		return
+	}
+	return
+}
+
+func ScreenSaveRoomDataTrend(roomId string, data ScreenRoomDataTrendRespData, index string) (err error) {
+	dataTrendM.Lock()
+	defer dataTrendM.Unlock()
+	// 2. 序列化
+	b, err := json.Marshal(data)
+	if err != nil {
+		return
+	}
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	// 3. 存储到临时文件
+	// 判断文件夹是否存在
+	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
+		_ = os.MkdirAll(path, os.ModePerm)
+	}
+	if err = ioutil.WriteFile(path + "/screen_data_data_trend-" + index + ".tmp", b, 0755); err != nil {
+		return
+	}
+	return
+}
+
 func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData) (err error) {
 	overviewM.Lock()
 	defer overviewM.Unlock()
@@ -269,7 +435,7 @@ func ScreenLoadBaseInfo(roomId string) (data ScreenBaseInfoRespData, err error) 
 		return
 	}
 	// 反序列化
-	err = json.Unmarshal(b, &data)
+	_ = json.Unmarshal(b, &data)
 	return
 }
 func ScreenLoadProductDetail(roomId string) (data ScreenProductDetailRespData, err error) {
@@ -282,7 +448,7 @@ func ScreenLoadProductDetail(roomId string) (data ScreenProductDetailRespData, e
 		return
 	}
 	// 反序列化
-	err = json.Unmarshal(b, &data)
+	_ = json.Unmarshal(b, &data)
 	return
 }
 func ScreenLoadRoomOverview(roomId string) (data ScreenRoomOverviewRespData, err error) {
@@ -295,6 +461,32 @@ func ScreenLoadRoomOverview(roomId string) (data ScreenRoomOverviewRespData, err
 		return
 	}
 	// 反序列化
-	err = json.Unmarshal(b, &data)
+	_ = json.Unmarshal(b, &data)
+	return
+}
+func ScreenLoadRoomDataTrend(roomId string, index string) (data ScreenRoomDataTrendRespData, err error) {
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	if _, _err := os.Stat(path + "/screen_data_data_trend-" + index + ".tmp"); os.IsNotExist(_err) {
+		return
+	}
+	b, err := ioutil.ReadFile(path + "/screen_data_data_trend-" + index + ".tmp")
+	if err != nil {
+		return
+	}
+	// 反序列化
+	_ = json.Unmarshal(b, &data)
+	return
+}
+func ScreenLoadLiveRoomDashboardV2Resp(roomId string) (data LiveRoomDashboardV2RespData, err error) {
+	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
+	if _, _err := os.Stat(path + "/live_room_dashboard_v2.tmp"); os.IsNotExist(_err) {
+		return
+	}
+	b, err := ioutil.ReadFile(path + "/live_room_dashboard_v2.tmp")
+	if err != nil {
+		return
+	}
+	// 反序列化
+	_ = json.Unmarshal(b, &data)
 	return
 }
