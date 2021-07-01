@@ -56,4 +56,5 @@ type Data struct {
 	GWCDJLB bool `json:"gwcdjlb"`
 	ZBHMZHLB bool `json:"zbhmzhlb"`
 
+	StreamUrl string `json:"stream_url"`
 }

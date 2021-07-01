@@ -113,7 +113,7 @@ func main() {
 					fmt.Println("get live play info error:" + err.Error())
 				}
 			}
-			time.Sleep(100 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}()
 	go func() {

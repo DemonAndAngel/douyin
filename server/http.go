@@ -179,6 +179,8 @@ func Run() {
 						ZFLB: zfl < uv.YZFL,
 						GWCDJLB: gwcdjl < uv.YGWCDJL,
 						ZBHMZHLB: zbhmzhl < uv.YZBHHZHL,
+
+						StreamUrl: info.StreamURL,
 					},
 				})
 				return
