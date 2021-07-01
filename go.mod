@@ -9,5 +9,6 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gin-gonic/gin v1.7.2
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0
+	github.com/panjf2000/ants/v2 v2.4.6
 	github.com/spf13/viper v1.8.0
 )

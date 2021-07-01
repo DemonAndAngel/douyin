@@ -5,6 +5,7 @@ import (
 	"douyin/utils"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"math"
 	"net/http"
 	"strconv"
 )
@@ -71,9 +72,8 @@ func Run() {
 	r.POST("/api/set/uv", func(c *gin.Context) {
 		// 设置预期uv值
 		uv := utils.UV{}
-		if c.ShouldBind(&uv) == nil {
-			_ = utils.SetUV(uv)
-		}
+		_ = c.ShouldBind(&uv)
+		_ = utils.SetUV(uv)
 		c.JSON(http.StatusOK, gin.H{
 			"uv": uv,
 		})
@@ -139,9 +139,37 @@ func Run() {
 					watchUcnt = y.WatchUcnt
 				}
 				ozhl := (float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
+				if math.IsInf(ozhl, 0) {
+					ozhl = 100
+				}
 				zfl := (float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
+				if math.IsInf(zfl, 0) {
+					zfl = 100
+				}
 				gwcdjl := (float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100
+				if math.IsInf(gwcdjl, 0) {
+					gwcdjl = 100
+				}
 				zbhmzhl := (float64(b.OnlineUserUcnt.Value)/float64(zbjbgrs))*100
+				if math.IsInf(zbhmzhl, 0) {
+					zbhmzhl = 100
+				}
+				sssd := (float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)
+				if math.IsInf(sssd, 0) {
+					sssd = 0
+				}
+				suv := (float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value)
+				if math.IsInf(suv, 0) {
+					suv = 0
+				}
+				cjrszhl := (float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100
+				if math.IsInf(cjrszhl, 0) {
+					cjrszhl = 100
+				}
+				kdj := float64(b.Gmv)/100/float64(b.PayCnt.Value)
+				if math.IsInf(kdj, 0) {
+					kdj = 0
+				}
 				c.JSON(http.StatusOK, gin.H{
 					"code": 200,
 					"msg": "success",
@@ -157,29 +185,24 @@ func Run() {
 						Click:          strconv.Itoa(o.ProductStats.ClickUv),
 						YinLiu:         "",
 						FYinLiu:        "",
-						SSSD:           utils.KeepFloat64ToString((float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)*uv.UV, 2),
-						UV:             utils.KeepFloat64ToString(uv.UV, 2),
-						SUV:            utils.KeepFloat64ToString((float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value), 2),
+						SSSD:           utils.KeepFloat64ToString(sssd*uv.UV, 2),
+						SUV:            utils.KeepFloat64ToString(suv, 2),
 						OZHL:           utils.KeepFloat64ToString(ozhl, 2) + "%",
-						CJRSZHL:        utils.KeepFloat64ToString((float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100, 2) + "%",
+						CJRSZHL:        utils.KeepFloat64ToString(cjrszhl, 2) + "%",
 						ZFL:            utils.KeepFloat64ToString(zfl, 2) + "%",
 						GWCDJL:         utils.KeepFloat64ToString(gwcdjl, 2) + "%",
-						KDJ:            utils.KeepFloat64ToString(float64(b.Gmv)/100/float64(b.PayCnt.Value), 2),
+						KDJ:            utils.KeepFloat64ToString(kdj, 2),
 						CJFSZB:         utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
 						RJKBSC:         strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
-
 						ZBJBGRS: strconv.Itoa(zbjbgrs),
 						ZBHMZHL: utils.KeepFloat64ToString(zbhmzhl, 2) + "%",
-
 						LKZBJRS: strconv.Itoa(leaveUcnt),
 						SSZXRS: strconv.Itoa(onlineUserCnt),
 						JRZBJRS: strconv.Itoa(watchUcnt),
-
 						DDZHLB: ozhl < uv.YDDZHL,
 						ZFLB: zfl < uv.YZFL,
 						GWCDJLB: gwcdjl < uv.YGWCDJL,
 						ZBHMZHLB: zbhmzhl < uv.YZBHHZHL,
-
 						StreamUrl: info.StreamURL,
 					},
 				})

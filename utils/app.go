@@ -1,6 +1,8 @@
 package utils
 
-import "time"
+import (
+	"time"
+)
 
 // 全局变量
 var MyApp *App
@@ -32,7 +34,7 @@ type Data struct {
 	YinLiu string `json:"yin_liu"`
 	FYinLiu string `json:"f_yin_liu"`
 	SSSD string `json:"sssd"`
-	UV string `json:"uv"`
+
 	SUV string `json:"suv"`
 	OZHL string `json:"ozhl"`
 	CJRSZHL string `json:"cjrszhl"`
@@ -57,4 +59,38 @@ type Data struct {
 	ZBHMZHLB bool `json:"zbhmzhlb"`
 
 	StreamUrl string `json:"stream_url"`
+}
+
+func (data *Data) ToWriteStrings(t time.Time, uv *UV) []string {
+	return []string{
+		TimeFormat("Y-m-d H:i:s", t),
+		data.PayCnt,
+		data.PayUcnt,
+		data.IncrFansCnt,
+		data.OnlineUserUcnt,
+		data.Gmv,
+		data.Exposure,
+		data.Click,
+		data.YinLiu,
+		data.FYinLiu,
+		data.SSSD,
+		KeepFloat64ToString(uv.UV, 2),
+		data.SUV,
+		data.OZHL,
+		data.CJRSZHL,
+		data.ZFL,
+		data.GWCDJL,
+		data.KDJ,
+		data.CJFSZB,
+		data.RJKBSC,
+		data.ZBJBGRS,
+		data.ZBHMZHL,
+		data.LKZBJRS,
+		data.SSZXRS,
+		data.JRZBJRS,
+		KeepFloat64ToString(uv.YDDZHL, 2) + "%",
+		KeepFloat64ToString(uv.YZFL, 2) + "%",
+		KeepFloat64ToString(uv.YGWCDJL, 2) + "%",
+		KeepFloat64ToString(uv.YZBHHZHL, 2) + "%",
+	}
 }
