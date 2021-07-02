@@ -562,8 +562,8 @@ func waitLogin() chromedp.ActionFunc {
 				}
 			})
 			if err = chromedp.Run(ctx, &chromedp.Tasks{
-				chromedp.Navigate("https://creator.douyin.com/business_api/home/buyin_redirect/10100"),
-				waitUrl(&talentUrl, 5),
+				chromedp.Navigate("https://compass.jinritemai.com/business_api/home/buyin_redirect/10100"),
+				waitUrl(&talentUrl, 10),
 			}); err != nil {
 				return
 			}
