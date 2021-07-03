@@ -672,10 +672,10 @@ func runWrite(app utils.App, t time.Time, s int64, uv utils.UV, b api.ScreenBase
 	zfl := (float64(b.IncrFansCnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
 	gwcdjl := (float64(o.ProductStats.ClickUv) / float64(o.ProductStats.ShowUv)) * 100
 	zbhmzhl := (float64(b.OnlineUserUcnt.Value) / float64(zbjbgrs)) * 100
-	sssd := (float64(b.Gmv) / 100) - float64(b.OnlineUserUcnt.Value)
+	sssd := (float64(b.Gmv) / 100) - (float64(b.OnlineUserUcnt.Value) * uv.UV)
 	suv := (float64(b.Gmv) / 100) / float64(b.OnlineUserUcnt.Value)
 	cjrszhl := (float64(b.PayUcnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
-	kdj := float64(b.Gmv) / 100 / float64(b.PayCnt.Value)
+	kdj := (float64(b.Gmv) / 100) / float64(b.PayCnt.Value)
 	err = p.Invoke(Write{
 		Now: t,
 		App: app,
