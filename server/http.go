@@ -5,7 +5,6 @@ import (
 	"douyin/utils"
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"math"
 	"net/http"
 	"strconv"
 )
@@ -112,7 +111,7 @@ func Run() {
 		}else{
 			b, _ := api.ScreenLoadBaseInfo(info.RoomID)
 			o, _ := api.ScreenLoadRoomOverview(info.RoomID)
-			d, _ := api.ScreenLoadRoomDataTrend(info.RoomID, "trend_popularity")
+			d, _ := api.ScreenLoadRoomDataTrendTP(info.RoomID)
 			lv2, _ := api.ScreenLoadLiveRoomDashboardV2Resp(info.RoomID)
 			if b.Title == "" {
 				c.JSON(http.StatusOK, gin.H{
@@ -138,38 +137,14 @@ func Run() {
 					onlineUserCnt = y.OnlineUserCnt
 					watchUcnt = y.WatchUcnt
 				}
-				ozhl := (float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
-				if math.IsInf(ozhl, 0) {
-					ozhl = 100
-				}
-				zfl := (float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
-				if math.IsInf(zfl, 0) {
-					zfl = 100
-				}
-				gwcdjl := (float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100
-				if math.IsInf(gwcdjl, 0) {
-					gwcdjl = 100
-				}
-				zbhmzhl := (float64(b.OnlineUserUcnt.Value)/float64(zbjbgrs))*100
-				if math.IsInf(zbhmzhl, 0) {
-					zbhmzhl = 100
-				}
-				sssd := (float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)
-				if math.IsInf(sssd, 0) {
-					sssd = 0
-				}
-				suv := (float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value)
-				if math.IsInf(suv, 0) {
-					suv = 0
-				}
-				cjrszhl := (float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100
-				if math.IsInf(cjrszhl, 0) {
-					cjrszhl = 100
-				}
-				kdj := float64(b.Gmv)/100/float64(b.PayCnt.Value)
-				if math.IsInf(kdj, 0) {
-					kdj = 0
-				}
+				ozhl := (float64(b.PayCnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
+				zfl := (float64(b.IncrFansCnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
+				gwcdjl := (float64(o.ProductStats.ClickUv) / float64(o.ProductStats.ShowUv)) * 100
+				zbhmzhl := (float64(b.OnlineUserUcnt.Value) / float64(zbjbgrs)) * 100
+				sssd := (float64(b.Gmv) / 100) - float64(b.OnlineUserUcnt.Value)
+				suv := (float64(b.Gmv) / 100) / float64(b.OnlineUserUcnt.Value)
+				cjrszhl := (float64(b.PayUcnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
+				kdj := float64(b.Gmv) / 100 / float64(b.PayCnt.Value)
 				c.JSON(http.StatusOK, gin.H{
 					"code": 200,
 					"msg": "success",

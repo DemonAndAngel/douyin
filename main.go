@@ -16,8 +16,6 @@ import (
 	"github.com/panjf2000/ants/v2"
 	"github.com/spf13/viper"
 	"log"
-	"math"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -67,21 +65,24 @@ func SetConfig() {
 			QrcodeExpireS: viper.GetInt64("Interval.QrcodeExpireS"),
 			UrlS:          viper.GetInt64("Interval.UrlS"),
 			SaveS:         viper.GetInt64("Interval.SaveS"),
-			SaveSEX: viper.GetInt64("Interval.SaveSEX"),
+			SaveSEX:       viper.GetInt64("Interval.SaveSEX"),
 		},
 		Server: utils.ConfigServer{
 			Port: viper.GetInt("Server.Port"),
 		},
 	}
 }
+
 var p *ants.PoolWithFunc
+
 type Write struct {
-	Now time.Time
-	App utils.App
+	Now  time.Time
+	App  utils.App
 	Data utils.Data
-	UV utils.UV
-	S int64
+	UV   utils.UV
+	S    int64
 }
+
 func main() {
 	p, _ = ants.NewPoolWithFunc(3, writeCsv)
 	defer p.Release()
@@ -174,13 +175,15 @@ func getLivePlayInfoUrl() (err error) {
 		switch ev := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			if strings.Index(ev.Request.URL, "api/livepc/playinfo") != -1 {
-				playUrl = ev.Request.URL
 				playInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					Url:                        playUrl,
+					Url: ev.Request.URL,
 				}, "URL")
-				if err == nil {
+				if err != nil {
+					fmt.Println(err)
+				} else {
 					utils.MyApp.PlayInfo = playInfo
 					utils.MyApp.LastPlayInfoUrlTime = time.Now()
+					playUrl = ev.Request.URL
 				}
 			}
 			break
@@ -234,7 +237,6 @@ func getLivePlayInfo() (err error) {
 	return
 }
 
-
 func getData(q bool) (err error) {
 	// 检测时间是否满足
 	now := time.Now()
@@ -262,11 +264,11 @@ func getData(q bool) (err error) {
 		// 存数据
 		_ = api.ScreenSaveProductDetail(info.RoomID, pResp.Data)
 	}
-	dTResp := api.ScreenRoomDataTrend(info.DataTrendUrl, "trend_popularity")
+	dTResp := api.ScreenRoomDataTrendTP(info.DataTrendUrl)
 	fmt.Println("dTResp", dTResp)
 	if dTResp.St == 0 {
 		// 存数据
-		_ = api.ScreenSaveRoomDataTrend(info.RoomID, dTResp.Data, "trend_popularity")
+		_ = api.ScreenSaveRoomDataTrendTP(info.RoomID, dTResp.Data)
 	}
 	lResp := api.ScreenLiveRoomDashboardV2(info.LiveRoomDashboardV2Url)
 	fmt.Println("lResp", lResp)
@@ -334,82 +336,75 @@ func getLiveDataUrls() (err error) {
 		case *network.EventRequestWillBeSent:
 			req := ev.Request
 			if strings.Index(req.URL, "business_api/author/screen/base_info") != -1 {
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:            req.URL,
+					ProductDetailUrl:       "",
+					LiveDetailUrl:          "",
+					DataTrendUrl:           "",
+					LiveRoomDashboardV2Url: "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
 				baseUrl = req.URL
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:                req.URL,
-					ProductDetailUrl:           "",
-					LiveDetailUrl:              "",
-					DataTrendUrl: "",
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 			} else if strings.Index(req.URL, "business_api/author/screen/product_detail") != -1 {
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:            "",
+					ProductDetailUrl:       req.URL,
+					LiveDetailUrl:          "",
+					DataTrendUrl:           "",
+					LiveRoomDashboardV2Url: "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
 				proUrl = req.URL
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:                "",
-					ProductDetailUrl:           req.URL,
-					LiveDetailUrl:              "",
-					DataTrendUrl: "",
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 			} else if strings.Index(req.URL, "api/livepc/data/room/overview") != -1 {
+				// 解析url并存储数据
+				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
+					BaseInfoUrl:            "",
+					ProductDetailUrl:       "",
+					LiveDetailUrl:          req.URL,
+					DataTrendUrl:           "",
+					LiveRoomDashboardV2Url: "",
+				}, "ROOM_DATA_URL")
+				if err != nil {
+					fmt.Println(err)
+				}
+				utils.MyApp.PlayInfo = pageInfo
 				detailUrl = req.URL
+			} else if strings.Index(req.URL, "index_selected=trend_popularity") != -1 {
 				// 解析url并存储数据
 				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:                "",
-					ProductDetailUrl:           "",
-					LiveDetailUrl:              req.URL,
-					DataTrendUrl: "",
+					BaseInfoUrl:            "",
+					ProductDetailUrl:       "",
+					LiveDetailUrl:          "",
+					DataTrendUrl:           req.URL,
 					LiveRoomDashboardV2Url: "",
 				}, "ROOM_DATA_URL")
 				if err != nil {
 					fmt.Println(err)
 				}
 				utils.MyApp.PlayInfo = pageInfo
-			} else if strings.Index(req.URL, "business_api/author/screen/data_trend") != -1 {
-				// 去掉 index_selected 参数
-				u, _ := url.Parse(req.URL)
-				m, _ := url.ParseQuery(u.RawQuery)
-				if _, ok := m["index_selected"]; ok {
-					delete(m, "index_selected")
-				}
-				u.RawQuery = m.Encode()
-				dataTrendUrl = u.String()
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:                "",
-					ProductDetailUrl:           "",
-					LiveDetailUrl:              "",
-					DataTrendUrl: req.URL,
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
+				dataTrendUrl = req.URL
 			} else if strings.Index(req.URL, "business_api/author/live_detail/live_room/dashboard_v2") != -1 {
-				liveRoomDashboardV2Url = req.URL
 				// 解析url并存储数据
 				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:                "",
-					ProductDetailUrl:           "",
-					LiveDetailUrl:              "",
-					DataTrendUrl: "",
+					BaseInfoUrl:            "",
+					ProductDetailUrl:       "",
+					LiveDetailUrl:          "",
+					DataTrendUrl:           "",
 					LiveRoomDashboardV2Url: req.URL,
 				}, "ROOM_DATA_URL")
 				if err != nil {
 					fmt.Println(err)
 				}
 				utils.MyApp.PlayInfo = pageInfo
+				liveRoomDashboardV2Url = req.URL
 			}
 			break
 		}
@@ -424,9 +419,9 @@ func getLiveDataUrls() (err error) {
 	}
 	err = chromedp.Run(ctx, &chromedp.Tasks{
 		chromedp.Navigate(winUrl),
-		waitUrl(&baseUrl, 10), // 等待url获取
-		waitUrl(&proUrl, 10),  // 等待url获取
-		waitUrl(&dataTrendUrl, 10),  // 等待url获取
+		waitUrl(&baseUrl, 10),      // 等待url获取
+		waitUrl(&proUrl, 10),       // 等待url获取
+		waitUrl(&dataTrendUrl, 10), // 等待url获取
 	})
 	// 拿电商罗盘-整体看板-流量数据
 	err = chromedp.Run(ctx, &chromedp.Tasks{
@@ -597,7 +592,7 @@ func checkLogin() error {
 	fmt.Println("result", string(b))
 	if result.St != 0 || result.Code != 0 || result.Data.UserRole == 0 {
 		utils.MyApp.IsLogin = false
-	}else{
+	} else {
 		utils.MyApp.IsLogin = true
 	}
 	return nil
@@ -631,9 +626,9 @@ func genChromeCtx() (context.Context, context.CancelFunc, error) {
 // 获取直播专用csv对象
 func getLiveCsv(info utils.PlayInfoData, h string) (*utils.Csv, error) {
 	now := time.Now()
-	path := utils.FolderPath+"/数据/"+info.NickName + "/" + utils.TimeFormat("Y年m月d日H时i分", info.StartTime)
+	path := utils.FolderPath + "/数据/" + info.NickName + "/" + utils.TimeFormat("Y年m月d日H时i分", info.StartTime)
 	return utils.NewCsv(path,
-		"间隔" + h + "秒的数据", now, []string{
+		"间隔"+h+"秒的数据", now, []string{
 			"抓取时间",
 			"成交件数", "成交人数", "新增粉丝数", "累计观看人数", "GMV", "商品曝光人数", "商品点击人数", "引流品金额（低于10块）", "非引流品金额",
 			"实时刷单金额", "预期UV价值", "实时uv价值", "订单转化率", "成交人数转化率", "转粉率", "购物车点击率", "客单价", "成交粉丝占比",
@@ -656,7 +651,7 @@ func writeCsv(t interface{}) {
 	return
 }
 func runWrite(app utils.App, t time.Time, s int64, uv utils.UV, b api.ScreenBaseInfoRespData, o api.ScreenRoomOverviewRespData,
-	ld api.LiveRoomDashboardV2RespData, dt api.ScreenRoomDataTrendRespData) (err error) {
+	ld api.LiveRoomDashboardV2RespData, dt api.ScreenRoomDataTrendTPRespData) (err error) {
 	zbjbgrs := 0
 	for _, l := range ld.PopularityData {
 		if l.IndexDisplay == "直播间曝光人数" {
@@ -673,43 +668,19 @@ func runWrite(app utils.App, t time.Time, s int64, uv utils.UV, b api.ScreenBase
 		onlineUserCnt = y.OnlineUserCnt
 		watchUcnt = y.WatchUcnt
 	}
-	ozhl := (float64(b.PayCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
-	if math.IsInf(ozhl, 0) {
-		ozhl = 100
-	}
-	zfl := (float64(b.IncrFansCnt.Value)/float64(b.OnlineUserUcnt.Value))*100
-	if math.IsInf(zfl, 0) {
-		zfl = 100
-	}
-	gwcdjl := (float64(o.ProductStats.ClickUv)/float64(o.ProductStats.ShowUv))*100
-	if math.IsInf(gwcdjl, 0) {
-		gwcdjl = 100
-	}
-	zbhmzhl := (float64(b.OnlineUserUcnt.Value)/float64(zbjbgrs))*100
-	if math.IsInf(zbhmzhl, 0) {
-		zbhmzhl = 100
-	}
-	sssd := (float64(b.Gmv)/100)-float64(b.OnlineUserUcnt.Value)
-	if math.IsInf(sssd, 0) {
-		sssd = 0
-	}
-	suv := (float64(b.Gmv)/100)/float64(b.OnlineUserUcnt.Value)
-	if math.IsInf(suv, 0) {
-		suv = 0
-	}
-	cjrszhl := (float64(b.PayUcnt.Value)/float64(b.OnlineUserUcnt.Value))*100
-	if math.IsInf(cjrszhl, 0) {
-		cjrszhl = 100
-	}
-	kdj := float64(b.Gmv)/100/float64(b.PayCnt.Value)
-	if math.IsInf(kdj, 0) {
-		kdj = 0
-	}
+	ozhl := (float64(b.PayCnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
+	zfl := (float64(b.IncrFansCnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
+	gwcdjl := (float64(o.ProductStats.ClickUv) / float64(o.ProductStats.ShowUv)) * 100
+	zbhmzhl := (float64(b.OnlineUserUcnt.Value) / float64(zbjbgrs)) * 100
+	sssd := (float64(b.Gmv) / 100) - float64(b.OnlineUserUcnt.Value)
+	suv := (float64(b.Gmv) / 100) / float64(b.OnlineUserUcnt.Value)
+	cjrszhl := (float64(b.PayUcnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
+	kdj := float64(b.Gmv) / 100 / float64(b.PayCnt.Value)
 	err = p.Invoke(Write{
-		Now:  t,
-		App:  app,
+		Now: t,
+		App: app,
 		Data: utils.Data{
-			Title: 			b.Title,
+			Title:          b.Title,
 			PayCnt:         strconv.Itoa(b.PayCnt.Value),
 			PayUcnt:        strconv.Itoa(b.PayUcnt.Value),
 			IncrFansCnt:    strconv.Itoa(b.IncrFansCnt.Value),
@@ -728,18 +699,18 @@ func runWrite(app utils.App, t time.Time, s int64, uv utils.UV, b api.ScreenBase
 			KDJ:            utils.KeepFloat64ToString(kdj, 2),
 			CJFSZB:         utils.KeepFloat64ToString(b.PayFansRatio.Value*100, 2) + "%",
 			RJKBSC:         strconv.Itoa(b.AvgWatchDuration.Value) + "秒",
-			ZBJBGRS: strconv.Itoa(zbjbgrs),
-			ZBHMZHL: utils.KeepFloat64ToString(zbhmzhl, 2) + "%",
-			LKZBJRS: strconv.Itoa(leaveUcnt),
-			SSZXRS: strconv.Itoa(onlineUserCnt),
-			JRZBJRS: strconv.Itoa(watchUcnt),
-			DDZHLB: ozhl < uv.YDDZHL,
-			ZFLB: zfl < uv.YZFL,
-			GWCDJLB: gwcdjl < uv.YGWCDJL,
-			ZBHMZHLB: zbhmzhl < uv.YZBHHZHL,
+			ZBJBGRS:        strconv.Itoa(zbjbgrs),
+			ZBHMZHL:        utils.KeepFloat64ToString(zbhmzhl, 2) + "%",
+			LKZBJRS:        strconv.Itoa(leaveUcnt),
+			SSZXRS:         strconv.Itoa(onlineUserCnt),
+			JRZBJRS:        strconv.Itoa(watchUcnt),
+			DDZHLB:         ozhl < uv.YDDZHL,
+			ZFLB:           zfl < uv.YZFL,
+			GWCDJLB:        gwcdjl < uv.YGWCDJL,
+			ZBHMZHLB:       zbhmzhl < uv.YZBHHZHL,
 		},
-		UV:   uv,
-		S:    s,
+		UV: uv,
+		S:  s,
 	})
 	if err != nil {
 		return err

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	urlPkg "net/url"
 	"os"
 	"sync"
 )
@@ -204,12 +203,12 @@ func ScreenRoomOverview(url string) (result ScreenRoomOverviewResp) {
 	return
 }
 
-type ScreenRoomDataTrendResp struct {
+type ScreenRoomDataTrendTPResp struct {
 	St int `json:"st"`
 	Msg string `json:"msg"`
-	Data ScreenRoomDataTrendRespData `json:"data"`
+	Data ScreenRoomDataTrendTPRespData `json:"data"`
 }
-type ScreenRoomDataTrendRespData struct {
+type ScreenRoomDataTrendTPRespData struct {
 	TrendPopularity struct {
 		Unit struct {
 			LeaveUcnt string `json:"leave_ucnt"`
@@ -226,13 +225,9 @@ type ScreenRoomDataTrendRespData struct {
 		} `json:"value"`
 	} `json:"trend_popularity"`
 }
-func ScreenRoomDataTrend(url string, index string) (result ScreenRoomDataTrendResp) {
+func ScreenRoomDataTrendTP(url string) (result ScreenRoomDataTrendTPResp) {
 	client := &http.Client{}
-	u, _ := urlPkg.Parse(url)
-	m, _ := urlPkg.ParseQuery(u.RawQuery)
-	m["index_selected"] = []string{index}
-	u.RawQuery = m.Encode()
-	req := NewRequest("GET", u.String(), nil)
+	req := NewRequest("GET", url, nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		panic(err)
@@ -344,7 +339,7 @@ func ScreenSaveLiveRoomDashboardV2(roomId string, data LiveRoomDashboardV2RespDa
 	return
 }
 
-func ScreenSaveRoomDataTrend(roomId string, data ScreenRoomDataTrendRespData, index string) (err error) {
+func ScreenSaveRoomDataTrendTP(roomId string, data ScreenRoomDataTrendTPRespData) (err error) {
 	dataTrendM.Lock()
 	defer dataTrendM.Unlock()
 	// 2. 序列化
@@ -358,7 +353,7 @@ func ScreenSaveRoomDataTrend(roomId string, data ScreenRoomDataTrendRespData, in
 	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
 		_ = os.MkdirAll(path, os.ModePerm)
 	}
-	if err = ioutil.WriteFile(path + "/screen_data_data_trend-" + index + ".tmp", b, 0755); err != nil {
+	if err = ioutil.WriteFile(path + "/screen_data_data_trend-tp.tmp", b, 0755); err != nil {
 		return
 	}
 	return
@@ -464,12 +459,12 @@ func ScreenLoadRoomOverview(roomId string) (data ScreenRoomOverviewRespData, err
 	_ = json.Unmarshal(b, &data)
 	return
 }
-func ScreenLoadRoomDataTrend(roomId string, index string) (data ScreenRoomDataTrendRespData, err error) {
+func ScreenLoadRoomDataTrendTP(roomId string) (data ScreenRoomDataTrendTPRespData, err error) {
 	path := fmt.Sprintf(utils.RoomsDataPath, roomId)
-	if _, _err := os.Stat(path + "/screen_data_data_trend-" + index + ".tmp"); os.IsNotExist(_err) {
+	if _, _err := os.Stat(path + "/screen_data_data_trend-tp.tmp"); os.IsNotExist(_err) {
 		return
 	}
-	b, err := ioutil.ReadFile(path + "/screen_data_data_trend-" + index + ".tmp")
+	b, err := ioutil.ReadFile(path + "/screen_data_data_trend-tp.tmp")
 	if err != nil {
 		return
 	}

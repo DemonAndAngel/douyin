@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/kardianos/osext"
 	"io/ioutil"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -77,6 +78,9 @@ func KeepFloat64(val float64, num int) float64 {
 	return r
 }
 func KeepFloat64ToString(val float64, num int) string {
+	if math.IsInf(val, 0) || math.IsNaN(val) {
+		val = 0
+	}
 	return fmt.Sprintf(fmt.Sprintf("%%.%df", num), val)
 }
 func KeepStringToFloat64(val string) float64 {
