@@ -319,7 +319,7 @@ func getLiveDataUrls() (err error) {
 	//pB, _ := json.Marshal(data)
 	//params := string(pB)
 	//winUrl := `https://compass.jinritemai.com/business_api/home/buyin_redirect/15101` + fmt.Sprintf("?params=%s", url.QueryEscape(params))
-	winUrl := `https://compass.jinritemai.com/screen/list/talent/main` + fmt.Sprintf("?source=%s&live_app_id=%d&live_room_id=%s", "baiying_live_data", info.UserApp, info.RoomID)
+	winUrl := `https://compass.jinritemai.com/screen/talent` + fmt.Sprintf("?source=%s&live_app_id=%d&live_room_id=%s", "baiying_home", info.UserApp, info.RoomID)
 	baseUrl := ""
 	proUrl := ""
 	detailUrl := ""
@@ -419,6 +419,7 @@ func getLiveDataUrls() (err error) {
 	}
 	err = chromedp.Run(ctx, &chromedp.Tasks{
 		chromedp.Navigate(winUrl),
+		chromedp.Click(`#root > div > div._3WsbHpN89RDAL8Sh-8ELjT > div:nth-child(1) > div:nth-child(1) > div > div:nth-child(2)`),
 		waitUrl(&baseUrl, 10),      // 等待url获取
 		waitUrl(&proUrl, 10),       // 等待url获取
 		waitUrl(&dataTrendUrl, 10), // 等待url获取
