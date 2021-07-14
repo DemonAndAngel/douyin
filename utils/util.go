@@ -32,7 +32,7 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
-	FolderPath = "."
+	//FolderPath = "."
 	QrcodePath = FolderPath + "/tmp/qrcode.png"
 	CookiesPath = FolderPath + "/cookies.tmp"
 	UVPath = FolderPath + "/uv.tmp"

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 var baseInfoM *sync.RWMutex
@@ -170,6 +171,8 @@ type ScreenRoomOverviewRespData struct {
 		IncrFansNum int `json:"incr_fans_num"`
 		LikeNum int `json:"like_num"`
 		ShareNum int `json:"share_num"`
+		Last1CommentNum int `json:"last1_comment_num"` // 自有字段 上一次直播评论数
+		Last2CommentNum int `json:"last2_comment_num"` // 自有字段 上一次直播评论数
 	} `json:"interaction_stats"`
 	LiveStatus int `json:"live_status"`
 	OrderStats struct {
@@ -359,9 +362,21 @@ func ScreenSaveRoomDataTrendTP(roomId string, data ScreenRoomDataTrendTPRespData
 	return
 }
 
-func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData) (err error) {
+func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData, n time.Time, s1 time.Time, s2 time.Time) (err error) {
 	overviewM.Lock()
 	defer overviewM.Unlock()
+	// 判断是否需要更新数据
+	// 取出上一次数据
+	o, err := ScreenLoadRoomOverview(roomId)
+	if err != nil {
+		return
+	}
+	if s1.IsZero() || n.Sub(s1).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
+		data.InteractionStats.Last1CommentNum = o.InteractionStats.CommentNum
+	}
+	if s2.IsZero() || n.Sub(s2).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
+		data.InteractionStats.Last1CommentNum = o.InteractionStats.CommentNum
+	}
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {

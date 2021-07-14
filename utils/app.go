@@ -58,6 +58,9 @@ type Data struct {
 	GWCDJLB bool `json:"gwcdjlb"`
 	ZBHMZHLB bool `json:"zbhmzhlb"`
 
+	ZBJPLS string `json:"zbjpls"`
+	ZBPLCSZZL string `json:"zbplcszzl"`
+
 	StreamUrl string `json:"stream_url"`
 }
 
@@ -88,6 +91,8 @@ func (data *Data) ToWriteStrings(t time.Time, uv *UV) []string {
 		data.LKZBJRS,
 		data.SSZXRS,
 		data.JRZBJRS,
+		data.ZBJPLS,
+		data.ZBPLCSZZL,
 		KeepFloat64ToString(uv.YDDZHL, 2) + "%",
 		KeepFloat64ToString(uv.YZFL, 2) + "%",
 		KeepFloat64ToString(uv.YGWCDJL, 2) + "%",

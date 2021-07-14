@@ -145,6 +145,8 @@ func Run() {
 				suv := (float64(b.Gmv) / 100) / float64(b.OnlineUserUcnt.Value)
 				cjrszhl := (float64(b.PayUcnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
 				kdj := (float64(b.Gmv) / 100) / float64(b.PayCnt.Value)
+				// （下一秒-上一秒）/上一秒*100%
+				zbplcszzl := float64(o.InteractionStats.CommentNum - o.InteractionStats.Last1CommentNum) / float64(o.InteractionStats.Last1CommentNum) * 100
 				c.JSON(http.StatusOK, gin.H{
 					"code": 200,
 					"msg": "success",
@@ -179,6 +181,9 @@ func Run() {
 						GWCDJLB: gwcdjl < uv.YGWCDJL,
 						ZBHMZHLB: zbhmzhl < uv.YZBHHZHL,
 						StreamUrl: info.StreamURL,
+
+						ZBJPLS: 		strconv.Itoa(o.InteractionStats.CommentNum),
+						ZBPLCSZZL: 		utils.KeepFloat64ToString(zbplcszzl, 2) + "%",
 					},
 				})
 				return

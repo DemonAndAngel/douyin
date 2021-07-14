@@ -280,20 +280,22 @@ func getData(q bool) (err error) {
 	fmt.Println("oResp", oResp)
 	if oResp.St == 0 {
 		// 存数据
-		_ = api.ScreenSaveRoomOverview(info.RoomID, oResp.Data)
+		_ = api.ScreenSaveRoomOverview(info.RoomID, oResp.Data, now, utils.MyApp.LastSaveLiveDataTime, utils.MyApp.LastSaveEXLiveDataTime)
 	}
 	utils.MyApp.LastLiveDataTime = now
 	uv, _ := utils.GetUV()
 	// 检测是否需要写入数据
-	if !q && utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
-		err = runWrite(*app, now, utils.MyConfig.Interval.SaveS, uv, bResp.Data, oResp.Data, lResp.Data, dTResp.Data)
-		if err != nil {
-			return
+	if !q && utils.MyConfig.Interval.SaveS != 0 {
+		if utils.MyApp.LastSaveLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
+			err = runWrite(*app, now, utils.MyConfig.Interval.SaveS, uv, bResp.Data, oResp.Data, lResp.Data, dTResp.Data)
+			if err != nil {
+				return
+			}
+			utils.MyApp.LastSaveLiveDataTime = now
 		}
-		utils.MyApp.LastSaveLiveDataTime = now
 	}
-	if utils.MyConfig.Interval.SaveSEX != 0 {
-		if !q && utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
+	if !q && utils.MyConfig.Interval.SaveSEX != 0 {
+		if utils.MyApp.LastSaveEXLiveDataTime.IsZero() || now.Sub(utils.MyApp.LastSaveEXLiveDataTime).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
 			err = runWrite(*app, now, utils.MyConfig.Interval.SaveSEX, uv, bResp.Data, oResp.Data, lResp.Data, dTResp.Data)
 			if err != nil {
 				return
@@ -635,6 +637,7 @@ func getLiveCsv(info utils.PlayInfoData, h string) (*utils.Csv, error) {
 			"实时刷单金额", "预期UV价值", "实时uv价值", "订单转化率", "成交人数转化率", "转粉率", "购物车点击率", "客单价", "成交粉丝占比",
 			"人均看播时长",
 			"直播间曝光人数", "直播画面转化率", "离开直播间人数", "实时在线人数", "进入直播间人数",
+			"直播间评论次数", "直播评论次数增长率",
 			"预期订单转化率", "预期转粉率", "预期购物车点击率", "预期直播画面转化率",
 		})
 }
@@ -677,6 +680,13 @@ func runWrite(app utils.App, t time.Time, s int64, uv utils.UV, b api.ScreenBase
 	suv := (float64(b.Gmv) / 100) / float64(b.OnlineUserUcnt.Value)
 	cjrszhl := (float64(b.PayUcnt.Value) / float64(b.OnlineUserUcnt.Value)) * 100
 	kdj := (float64(b.Gmv) / 100) / float64(b.PayCnt.Value)
+	// （下一秒-上一秒）/上一秒*100%
+	var zbplcszzl float64 = 0
+	if s == utils.MyConfig.Interval.SaveS {
+		zbplcszzl = float64(o.InteractionStats.CommentNum - o.InteractionStats.Last1CommentNum) / float64(o.InteractionStats.Last1CommentNum) * 100
+	}else{
+		zbplcszzl = float64(o.InteractionStats.CommentNum - o.InteractionStats.Last2CommentNum) / float64(o.InteractionStats.Last2CommentNum) * 100
+	}
 	err = p.Invoke(Write{
 		Now: t,
 		App: app,
@@ -709,6 +719,8 @@ func runWrite(app utils.App, t time.Time, s int64, uv utils.UV, b api.ScreenBase
 			ZFLB:           zfl < uv.YZFL,
 			GWCDJLB:        gwcdjl < uv.YGWCDJL,
 			ZBHMZHLB:       zbhmzhl < uv.YZBHHZHL,
+			ZBJPLS: 		strconv.Itoa(o.InteractionStats.CommentNum),
+			ZBPLCSZZL: 		utils.KeepFloat64ToString(zbplcszzl, 2) + "%",
 		},
 		UV: uv,
 		S:  s,
