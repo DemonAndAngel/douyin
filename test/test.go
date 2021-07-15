@@ -93,16 +93,25 @@ func main() {
 	w := a.NewWindow("软件")
 	grabS := widget.NewEntry()
 	grabS.SetText(strconv.FormatInt(viper.GetInt64("Interval.GrabS"), 10))
+	// Interval
+	//GrabS=60 # 抓取时间间隔,单位:秒
+	//SaveS=300 # 写入excel间隔,单位:秒
+	//SaveSEX=60 # 写入excel间隔,单位:秒
+	// Server
+	//Port=8080
+
 	form := widget.NewForm(widget.NewFormItem("抓取时间间隔: ", grabS))
 	form.SubmitText = "应用配置"
 	form.OnSubmit = func () {
 		if grabS.Text != "" {
 		}
 	}
-	t := widget.NewMultiLineEntry()
-	c := container.NewBorder(t , nil, nil, nil)
-	s := container.NewVScroll(c)
-
+	t := widget.NewLabel("")
+	s := container.NewVScroll(t)
+	s.SetMinSize(fyne.Size{
+		Width:  500,
+		Height: 300,
+	})
 	w.SetContent(container.NewVBox(
 		form,
 		s,
@@ -116,10 +125,6 @@ func main() {
 			o := t.Text
 			o += time.Now().String() + "\n"
 			t.SetText(o)
-			fmt.Println(time.Now().String())
-			fmt.Println(t.Size().Height)
-			fmt.Println(s.Content.Size().Height)
-			fmt.Println(s.Size().Height)
 			s.ScrollToBottom()
 			time.Sleep(100 * time.Millisecond)
 		}
