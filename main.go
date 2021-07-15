@@ -216,7 +216,6 @@ func getLivePlayInfo() (err error) {
 			err = _err
 			return
 		}
-		utils.MyApp.PlayInfo = playInfo
 		// 重置地址
 		if result.Data.RoomID != "" && utils.MyApp.PlayInfo.RoomID != result.Data.RoomID {
 			// 需要重置地址
@@ -233,6 +232,7 @@ func getLivePlayInfo() (err error) {
 				return
 			}
 		}
+		utils.MyApp.PlayInfo = playInfo
 	}
 	return
 }
