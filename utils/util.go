@@ -23,10 +23,12 @@ var TemplatesPath = ""
 
 var mPlay *sync.RWMutex
 var mUv *sync.RWMutex
+//var mRoomUrl *sync.RWMutex
 
 func init() {
 	mPlay = new(sync.RWMutex)
 	mUv = new(sync.RWMutex)
+	//mRoomUrl = new(sync.RWMutex)
 	var err error
 	FolderPath, err = osext.ExecutableFolder()
 	if err != nil {
@@ -164,12 +166,40 @@ type PlayInfoData struct {
 	QrcodeSchemaURL string `json:"qrcode_schema_url"`
 	HasReleasedFissionActivity bool `json:"has_released_fission_activity"`
 	StartTime time.Time `json:"start_time"` // 开播时间
+}
+type RoomDataUrl struct {
 	BaseInfoUrl string `json:"base_info_url"`
 	ProductDetailUrl string `json:"product_detail_url"`
 	LiveDetailUrl string `json:"live_detail_url"`
 	DataTrendUrl string `json:"data_trend_url"`
 	LiveRoomDashboardV2Url string `json:"live_room_dashboard_v_2_url"`
 }
+//func SaveRoomDataUrl(roomId string, dataUrl RoomDataUrl) (err error) {
+//	mRoomUrl.Lock()
+//	defer mRoomUrl.Unlock()
+//	b, _ := json.Marshal(dataUrl)
+//	path := fmt.Sprintf(RoomsDataPath, roomId)
+//	// 判断文件夹是否存在
+//	if _, _err := os.Stat(path); _err != nil && os.IsNotExist(_err) {
+//		_ = os.MkdirAll(path, os.ModePerm)
+//	}
+//	if err = ioutil.WriteFile(path+ "/room_url.tmp", b, 0755); err != nil {
+//		return
+//	}
+//	return
+//}
+//func GetRoomDataUrl(roomId string) (dataUrl RoomDataUrl, err error) {
+//	if _, _err := os.Stat(fmt.Sprintf(RoomsDataPath, roomId) + "/room_url.tmp"); os.IsNotExist(_err) {
+//		return
+//	}
+//	b, err := ioutil.ReadFile(fmt.Sprintf(RoomsDataPath, roomId) + "/room_url.tmp")
+//	if err != nil {
+//		return
+//	}
+//	// 反序列化
+//	_ = json.Unmarshal(b, &dataUrl)
+//	return
+//}
 func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err error) {
 	mPlay.Lock()
 	defer mPlay.Unlock()
@@ -197,23 +227,6 @@ func SavePlayInfoData(newInfo PlayInfoData, t string) (info PlayInfoData, err er
 				info.RoomID = newInfo.RoomID
 				info.StartTime = time.Now()
 			}
-		}
-		break
-	case "ROOM_DATA_URL":
-		if newInfo.BaseInfoUrl != "" {
-			info.BaseInfoUrl = newInfo.BaseInfoUrl
-		}
-		if newInfo.ProductDetailUrl != "" {
-			info.ProductDetailUrl = newInfo.ProductDetailUrl
-		}
-		if newInfo.LiveDetailUrl != "" {
-			info.LiveDetailUrl = newInfo.LiveDetailUrl
-		}
-		if newInfo.DataTrendUrl != "" {
-			info.DataTrendUrl = newInfo.DataTrendUrl
-		}
-		if newInfo.LiveRoomDashboardV2Url != "" {
-			info.LiveRoomDashboardV2Url = newInfo.LiveRoomDashboardV2Url
 		}
 		break
 	}

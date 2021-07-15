@@ -24,11 +24,6 @@ import (
 
 func init() {
 	playInfo, _ := utils.GetPlayInfoData()
-	playInfo.BaseInfoUrl = ""
-	playInfo.DataTrendUrl = ""
-	playInfo.LiveRoomDashboardV2Url = ""
-	playInfo.LiveDetailUrl = ""
-	playInfo.ProductDetailUrl = ""
 	utils.MyApp = &utils.App{
 		PlayInfo: playInfo,
 	}
@@ -136,7 +131,7 @@ func main() {
 		// 定时获取直播间数据地址
 		for {
 			if utils.MyApp.IsLogin && utils.MyApp.PlayInfo.RoomID != "" {
-				err := getLiveDataUrls()
+				err := getLiveDataUrls(false)
 				if err != nil {
 					fmt.Println("get live data urls error:" + err.Error())
 				}
@@ -216,14 +211,23 @@ func getLivePlayInfo() (err error) {
 			err = _err
 			return
 		}
+		oldInfo := utils.MyApp.PlayInfo
+		utils.MyApp.PlayInfo = playInfo
+		fmt.Println("utils.MyApp.PlayInfo", utils.MyApp.PlayInfo)
+		fmt.Println("oldInfo", oldInfo)
 		// 重置地址
-		if result.Data.RoomID != "" && utils.MyApp.PlayInfo.RoomID != result.Data.RoomID {
+		if result.Data.RoomID != "" && oldInfo.RoomID != result.Data.RoomID {
 			// 需要重置地址
 			fmt.Println("需要重置地址")
-			_err = getLiveDataUrls()
-			if _err != nil {
-				err = _err
-				return
+			for {
+				if !utils.MyApp.IsGetUrl {
+					_err = getLiveDataUrls(true)
+					if _err != nil {
+						err = _err
+						return
+					}
+					break
+				}
 			}
 			// 重新获取一遍数据
 			_err = getData(true)
@@ -232,7 +236,6 @@ func getLivePlayInfo() (err error) {
 				return
 			}
 		}
-		utils.MyApp.PlayInfo = playInfo
 	}
 	return
 }
@@ -246,41 +249,43 @@ func getData(q bool) (err error) {
 	// 获取直播间
 	app := utils.MyApp
 	info := app.PlayInfo
-	if info.BaseInfoUrl == "" || info.ProductDetailUrl == "" ||
-		info.LiveDetailUrl == "" ||
-		info.LiveRoomDashboardV2Url == "" ||
-		info.DataTrendUrl == "" {
+	roomUrl := app.RoomDataUrl
+	if roomUrl.BaseInfoUrl == "" || roomUrl.ProductDetailUrl == "" ||
+		roomUrl.LiveDetailUrl == "" ||
+		roomUrl.LiveRoomDashboardV2Url == "" ||
+		roomUrl.DataTrendUrl == "" {
 		return
 	}
-	bResp := api.ScreenBaseInfo(info.BaseInfoUrl)
+	bResp := api.ScreenBaseInfo(roomUrl.BaseInfoUrl)
 	fmt.Println("bResp", bResp)
 	if bResp.St == 0 {
 		// 存数据
 		_ = api.ScreenSaveBaseInfo(info.RoomID, bResp.Data)
 	}
-	pResp := api.ScreenProductDetail(info.ProductDetailUrl)
+	pResp := api.ScreenProductDetail(roomUrl.ProductDetailUrl)
 	fmt.Println("pResp", pResp)
 	if pResp.St == 0 {
 		// 存数据
 		_ = api.ScreenSaveProductDetail(info.RoomID, pResp.Data)
 	}
-	dTResp := api.ScreenRoomDataTrendTP(info.DataTrendUrl)
+	dTResp := api.ScreenRoomDataTrendTP(roomUrl.DataTrendUrl)
 	fmt.Println("dTResp", dTResp)
 	if dTResp.St == 0 {
 		// 存数据
 		_ = api.ScreenSaveRoomDataTrendTP(info.RoomID, dTResp.Data)
 	}
-	lResp := api.ScreenLiveRoomDashboardV2(info.LiveRoomDashboardV2Url)
+	lResp := api.ScreenLiveRoomDashboardV2(roomUrl.LiveRoomDashboardV2Url)
 	fmt.Println("lResp", lResp)
 	if lResp.St == 0 {
 		// 存数据
 		_ = api.ScreenSaveLiveRoomDashboardV2(info.RoomID, lResp.Data)
 	}
-	oResp := api.ScreenRoomOverview(info.LiveDetailUrl)
+	oResp := api.ScreenRoomOverview(roomUrl.LiveDetailUrl)
 	fmt.Println("oResp", oResp)
 	if oResp.St == 0 {
 		// 存数据
-		_ = api.ScreenSaveRoomOverview(info.RoomID, oResp.Data, now, utils.MyApp.LastSaveLiveDataTime, utils.MyApp.LastSaveEXLiveDataTime)
+		oR, _ := api.ScreenSaveRoomOverview(info.RoomID, oResp.Data, now, utils.MyApp.LastSaveLiveDataTime, utils.MyApp.LastSaveEXLiveDataTime)
+		oResp.Data = oR
 	}
 	utils.MyApp.LastLiveDataTime = now
 	uv, _ := utils.GetUV()
@@ -306,13 +311,19 @@ func getData(q bool) (err error) {
 	return
 }
 
-func getLiveDataUrls() (err error) {
+func getLiveDataUrls(q bool) (err error) {
+	utils.MyApp.IsGetUrl = true
+	defer func () {
+		utils.MyApp.IsGetUrl = false
+	}()
 	// 检测时间是否满足
 	now := time.Now()
-	if !utils.MyApp.LastLiveListUrlsTime.IsZero() && now.Sub(utils.MyApp.LastLiveListUrlsTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
+	if !q && !utils.MyApp.LastLiveListUrlsTime.IsZero() && now.Sub(utils.MyApp.LastLiveListUrlsTime).Seconds() < float64(utils.MyConfig.Interval.UrlS) {
 		return
 	}
+	fmt.Println("开始拉取地址")
 	info := utils.MyApp.PlayInfo
+	fmt.Println("info", info)
 	// 拼接浏览器地址
 	//data := make(map[string]interface{})
 	//data["live_room_id"] = info.RoomID
@@ -338,74 +349,14 @@ func getLiveDataUrls() (err error) {
 		case *network.EventRequestWillBeSent:
 			req := ev.Request
 			if strings.Index(req.URL, "business_api/author/screen/base_info") != -1 {
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:            req.URL,
-					ProductDetailUrl:       "",
-					LiveDetailUrl:          "",
-					DataTrendUrl:           "",
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 				baseUrl = req.URL
 			} else if strings.Index(req.URL, "business_api/author/screen/product_detail") != -1 {
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:            "",
-					ProductDetailUrl:       req.URL,
-					LiveDetailUrl:          "",
-					DataTrendUrl:           "",
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 				proUrl = req.URL
 			} else if strings.Index(req.URL, "api/livepc/data/room/overview") != -1 {
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:            "",
-					ProductDetailUrl:       "",
-					LiveDetailUrl:          req.URL,
-					DataTrendUrl:           "",
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 				detailUrl = req.URL
 			} else if strings.Index(req.URL, "index_selected=trend_popularity") != -1 {
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:            "",
-					ProductDetailUrl:       "",
-					LiveDetailUrl:          "",
-					DataTrendUrl:           req.URL,
-					LiveRoomDashboardV2Url: "",
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 				dataTrendUrl = req.URL
 			} else if strings.Index(req.URL, "business_api/author/live_detail/live_room/dashboard_v2") != -1 {
-				// 解析url并存储数据
-				pageInfo, err := utils.SavePlayInfoData(utils.PlayInfoData{
-					BaseInfoUrl:            "",
-					ProductDetailUrl:       "",
-					LiveDetailUrl:          "",
-					DataTrendUrl:           "",
-					LiveRoomDashboardV2Url: req.URL,
-				}, "ROOM_DATA_URL")
-				if err != nil {
-					fmt.Println(err)
-				}
-				utils.MyApp.PlayInfo = pageInfo
 				liveRoomDashboardV2Url = req.URL
 			}
 			break
@@ -439,6 +390,18 @@ func getLiveDataUrls() (err error) {
 	if err != nil {
 		return
 	}
+	roomDataUrl := utils.RoomDataUrl{
+		BaseInfoUrl:            baseUrl,
+		ProductDetailUrl:       proUrl,
+		LiveDetailUrl:          detailUrl,
+		DataTrendUrl:           dataTrendUrl,
+		LiveRoomDashboardV2Url: liveRoomDashboardV2Url,
+	}
+	//err = utils.SaveRoomDataUrl(info.RoomID, roomDataUrl)
+	//if err != nil {
+	//	return
+	//}
+	utils.MyApp.RoomDataUrl = roomDataUrl
 	utils.MyApp.LastLiveListUrlsTime = now
 	return
 }
@@ -610,7 +573,7 @@ func genChromeCtx() (context.Context, context.CancelFunc, error) {
 		append(
 			chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.Flag("headless", true),
-			chromedp.Flag("blink-settings", "imagesEnabled=false"),
+			//chromedp.Flag("blink-settings", "imagesEnabled=false"),
 			chromedp.UserAgent(utils.GenUserAgent().Value),
 		)...,
 	)

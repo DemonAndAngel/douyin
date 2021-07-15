@@ -362,7 +362,7 @@ func ScreenSaveRoomDataTrendTP(roomId string, data ScreenRoomDataTrendTPRespData
 	return
 }
 
-func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData, n time.Time, s1 time.Time, s2 time.Time) (err error) {
+func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData, n time.Time, s1 time.Time, s2 time.Time) (oR ScreenRoomOverviewRespData, err error) {
 	overviewM.Lock()
 	defer overviewM.Unlock()
 	// 判断是否需要更新数据
@@ -371,12 +371,16 @@ func ScreenSaveRoomOverview(roomId string, data ScreenRoomOverviewRespData, n ti
 	if err != nil {
 		return
 	}
+	if !s1.IsZero() {
+		fmt.Println(n.Sub(s1).Seconds())
+	}
 	if s1.IsZero() || n.Sub(s1).Seconds() >= float64(utils.MyConfig.Interval.SaveS) {
 		data.InteractionStats.Last1CommentNum = o.InteractionStats.CommentNum
 	}
 	if s2.IsZero() || n.Sub(s2).Seconds() >= float64(utils.MyConfig.Interval.SaveSEX) {
-		data.InteractionStats.Last1CommentNum = o.InteractionStats.CommentNum
+		data.InteractionStats.Last2CommentNum = o.InteractionStats.CommentNum
 	}
+	oR = data
 	// 2. 序列化
 	b, err := json.Marshal(data)
 	if err != nil {
